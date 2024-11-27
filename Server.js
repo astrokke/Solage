@@ -56,5 +56,3 @@ wss.on("connection", (socket) => {
     }
   });
 });
-
-console.log("Serveur WebSocket en cours d'exécution sur ws://localhost:8080");
