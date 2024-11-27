@@ -162,7 +162,7 @@ function App() {
   useEffect(() => {
     if (publicKey) {
       // Connecte au serveur WebSocket
-      websocket.current = new WebSocket("ws://solage-56rf.onrender.com:10000");
+      websocket.current = new WebSocket("wss://solage-56rf.onrender.com");
 
       // Authentifie l'utilisateur après la connexion WebSocket
       websocket.current.onopen = () => {
