@@ -1,9 +1,9 @@
-import WebSocket from "ws";
+import { WebSocketServer } from "ws";
 
 const clients = {}; // Stocke les connexions des utilisateurs avec leur clé publique
 
-const port = process.env.PORT || 8080; // Utilise le port fourni par Render ou 8080 par défaut
-const wss = new WebSocket.Server({ port: port });
+const port = process.env.PORT || 10000; // Utilise le port fourni par Render ou 8080 par défaut
+const wss = new WebSocketServer({ port: port });
 
 console.log(`Serveur WebSocket en cours d'exécution sur le port ${port}`);
 wss.on("connection", (socket) => {
