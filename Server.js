@@ -1,31 +1,43 @@
 import { WebSocketServer } from "ws";
+import { createServer } from "http";
 
-const clients = {}; // Stocke les connexions des utilisateurs avec leur clé publique
+const port = process.env.PORT || 10000;
 
-const port = process.env.PORT || 10000; // Utilise le port fourni par Render ou 8080 par défaut
-const wss = new WebSocketServer({ port: port });
+// Create HTTP server
+const server = createServer();
 
-console.log(`Serveur WebSocket en cours d'exécution sur le port ${port}`);
+// Create WebSocket server instance attached to HTTP server
+const wss = new WebSocketServer({ server });
+
+const clients = {};
+
+console.log(`WebSocket server running on port ${port}`);
+
 wss.on("connection", (socket) => {
-  console.log("Un utilisateur s'est connecté.");
+  console.log("Client connected");
 
   socket.on("message", (message) => {
     try {
       const data = JSON.parse(message);
 
-      // Authentification de l'utilisateur
       if (data.type === "authenticate") {
         const walletAddress = data.walletAddress;
         clients[walletAddress] = socket;
-        console.log(`Utilisateur authentifié : ${walletAddress}`);
+        console.log(`User authenticated: ${walletAddress}`);
+
+        // Send confirmation back to client
+        socket.send(
+          JSON.stringify({
+            type: "authentication_success",
+            message: "Successfully authenticated",
+          })
+        );
         return;
       }
 
-      // Transfert de message
       if (data.type === "message") {
         const { recipient, sender, content } = data;
 
-        // Vérifie si le destinataire est en ligne
         if (clients[recipient]) {
           clients[recipient].send(
             JSON.stringify({
@@ -35,25 +47,54 @@ wss.on("connection", (socket) => {
               timestamp: new Date().toISOString(),
             })
           );
-          console.log(`Message envoyé de ${sender} à ${recipient}`);
+          console.log(`Message sent from ${sender} to ${recipient}`);
+
+          // Send confirmation to sender
+          socket.send(
+            JSON.stringify({
+              type: "message_sent",
+              recipient,
+              timestamp: new Date().toISOString(),
+            })
+          );
         } else {
-          console.log(`Destinataire ${recipient} non connecté.`);
+          console.log(`Recipient ${recipient} not connected`);
+          socket.send(
+            JSON.stringify({
+              type: "error",
+              message: "Recipient is not online",
+            })
+          );
         }
         return;
       }
     } catch (error) {
-      console.error("Erreur de traitement du message:", error);
+      console.error("Error processing message:", error);
+      socket.send(
+        JSON.stringify({
+          type: "error",
+          message: "Failed to process message",
+        })
+      );
     }
   });
 
   socket.on("close", () => {
-    // Nettoyage des utilisateurs déconnectés
     for (const [key, client] of Object.entries(clients)) {
       if (client === socket) {
-        console.log(`Utilisateur déconnecté : ${key}`);
+        console.log(`User disconnected: ${key}`);
         delete clients[key];
         break;
       }
     }
   });
+
+  socket.on("error", (error) => {
+    console.error("WebSocket error:", error);
+  });
+});
+
+// Start server
+server.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
