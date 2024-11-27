@@ -1,7 +1,13 @@
-import { WalletNotConnectedError } from '@solana/wallet-adapter-base';
-import { Connection, Transaction, SystemProgram, PublicKey, Commitment } from '@solana/web3.js';
-import { FEES_CONFIG } from '../config/fees';
-import { TRANSACTION_SETTINGS, ERROR_MESSAGES } from './constants';
+import { WalletNotConnectedError } from "@solana/wallet-adapter-base";
+import {
+  Connection,
+  Transaction,
+  SystemProgram,
+  PublicKey,
+  Commitment,
+} from "@solana/web3.js";
+import { FEES_CONFIG } from "../config/fees";
+import { TRANSACTION_SETTINGS, ERROR_MESSAGES } from "./constants";
 
 export async function sendMessageTransaction(
   connection: Connection,
@@ -16,12 +22,24 @@ export async function sendMessageTransaction(
 
   try {
     const recipient = new PublicKey(recipientAddress);
+
+    // Vérifier le solde avant la transaction
+    const balance = await connection.getBalance(wallet.publicKey);
+    const totalCost =
+      TRANSACTION_SETTINGS.MESSAGE_FEE +
+      (FEES_CONFIG.FEES_ENABLED ? FEES_CONFIG.FEE_AMOUNT : 0);
+
+    if (balance < totalCost) {
+      onError(ERROR_MESSAGES.INSUFFICIENT_FUNDS);
+      return null;
+    }
+
     const instructions = [
       SystemProgram.transfer({
         fromPubkey: wallet.publicKey,
         toPubkey: recipient,
         lamports: TRANSACTION_SETTINGS.MESSAGE_FEE,
-      })
+      }),
     ];
 
     if (FEES_CONFIG.FEES_ENABLED) {
@@ -34,28 +52,24 @@ export async function sendMessageTransaction(
       );
     }
 
-    const latestBlockhash = await connection.getLatestBlockhash(
-      TRANSACTION_SETTINGS.CONFIRMATION_COMMITMENT
-    );
+    const { blockhash } = await connection.getLatestBlockhash("finalized");
 
-    const transaction = new Transaction()
-      .add(...instructions)
-      .setSigners(wallet.publicKey);
+    const transaction = new Transaction().add(...instructions);
 
-    transaction.recentBlockhash = latestBlockhash.blockhash;
+    transaction.recentBlockhash = blockhash;
     transaction.feePayer = wallet.publicKey;
 
     const signed = await wallet.signTransaction(transaction);
     const signature = await connection.sendRawTransaction(signed.serialize(), {
       skipPreflight: false,
-      preflightCommitment: TRANSACTION_SETTINGS.CONFIRMATION_COMMITMENT,
+      preflightCommitment: "finalized",
+      maxRetries: 5,
     });
 
-    const confirmation = await connection.confirmTransaction({
+    const confirmation = await connection.confirmTransaction(
       signature,
-      blockhash: latestBlockhash.blockhash,
-      lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-    }, TRANSACTION_SETTINGS.CONFIRMATION_COMMITMENT);
+      "finalized"
+    );
 
     if (confirmation.value.err) {
       throw new Error(ERROR_MESSAGES.TRANSACTION_FAILED);
@@ -63,6 +77,8 @@ export async function sendMessageTransaction(
 
     return signature;
   } catch (error: any) {
-    console.error('Transaction error:', error);
+    console.error("Transaction error:", error);
     onError(error.message || ERROR_MESSAGES.TRANSACTION_FAILED);
-    return n
+    return null;
+  }
+}

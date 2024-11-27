@@ -2,30 +2,27 @@ import { WebSocketServer } from "ws";
 import { createServer } from "http";
 
 const port = process.env.PORT || 10000;
-
-// Create HTTP server
 const server = createServer();
-
-// Create WebSocket server instance attached to HTTP server
 const wss = new WebSocketServer({ server });
 
-const clients = {};
+const clients = new Map();
 
 console.log(`WebSocket server running on port ${port}`);
 
 wss.on("connection", (socket) => {
   console.log("Client connected");
+  let userWalletAddress = null;
 
   socket.on("message", (message) => {
     try {
       const data = JSON.parse(message);
+      console.log("Received message:", data);
 
       if (data.type === "authenticate") {
-        const walletAddress = data.walletAddress;
-        clients[walletAddress] = socket;
-        console.log(`User authenticated: ${walletAddress}`);
+        userWalletAddress = data.walletAddress;
+        clients.set(userWalletAddress, socket);
+        console.log(`User authenticated: ${userWalletAddress}`);
 
-        // Send confirmation back to client
         socket.send(
           JSON.stringify({
             type: "authentication_success",
@@ -37,19 +34,23 @@ wss.on("connection", (socket) => {
 
       if (data.type === "message") {
         const { recipient, sender, content } = data;
+        console.log(
+          `Attempting to send message from ${sender} to ${recipient}`
+        );
 
-        if (clients[recipient]) {
-          clients[recipient].send(
-            JSON.stringify({
-              type: "message",
-              sender,
-              content,
-              timestamp: new Date().toISOString(),
-            })
-          );
+        const recipientSocket = clients.get(recipient);
+
+        if (recipientSocket && recipientSocket.readyState === 1) {
+          const messageData = JSON.stringify({
+            type: "message",
+            sender,
+            content,
+            timestamp: new Date().toISOString(),
+          });
+
+          recipientSocket.send(messageData);
           console.log(`Message sent from ${sender} to ${recipient}`);
 
-          // Send confirmation to sender
           socket.send(
             JSON.stringify({
               type: "message_sent",
@@ -80,12 +81,9 @@ wss.on("connection", (socket) => {
   });
 
   socket.on("close", () => {
-    for (const [key, client] of Object.entries(clients)) {
-      if (client === socket) {
-        console.log(`User disconnected: ${key}`);
-        delete clients[key];
-        break;
-      }
+    if (userWalletAddress) {
+      console.log(`User disconnected: ${userWalletAddress}`);
+      clients.delete(userWalletAddress);
     }
   });
 
@@ -94,7 +92,15 @@ wss.on("connection", (socket) => {
   });
 });
 
-// Start server
+// Ping pour maintenir les connexions actives
+setInterval(() => {
+  wss.clients.forEach((client) => {
+    if (client.readyState === 1) {
+      client.ping();
+    }
+  });
+}, 30000);
+
 server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
