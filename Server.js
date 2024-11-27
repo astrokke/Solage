@@ -2,9 +2,9 @@ import { WebSocketServer } from "ws";
 
 const clients = {}; // Stocke les connexions des utilisateurs avec leur clé publique
 
-// Création du serveur WebSocket
-const wss = new WebSocketServer({ port: 8080 });
-
+const port = process.env.PORT || 8080;
+const wss = new WebSocketServer({ port });
+console.log(`Serveur WebSocket en cours d'exécution sur le port ${port}`);
 wss.on("connection", (socket) => {
   console.log("Un utilisateur s'est connecté.");
 
