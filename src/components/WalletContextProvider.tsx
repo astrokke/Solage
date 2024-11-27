@@ -1,15 +1,17 @@
-import { FC, ReactNode, useMemo, useState } from "react";
+import { FC, ReactNode, useMemo } from "react";
 import {
   ConnectionProvider,
   WalletProvider,
 } from "@solana/wallet-adapter-react";
+import { WalletAdapterNetwork } from "@solana/wallet-adapter-base";
 import {
   PhantomWalletAdapter,
   SolflareWalletAdapter,
 } from "@solana/wallet-adapter-wallets";
 import { WalletModalProvider } from "@solana/wallet-adapter-react-ui";
-import { NetworkSelector } from "./NetworkSelector";
-import { NETWORKS, DEFAULT_NETWORK, NetworkConfig } from "../config/network";
+import { clusterApiUrl } from "@solana/web3.js";
+
+// Import wallet adapter CSS
 import "@solana/wallet-adapter-react-ui/styles.css";
 
 interface Props {
@@ -17,28 +19,22 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  const [selectedNetwork, setSelectedNetwork] =
-    useState<NetworkConfig>(DEFAULT_NETWORK);
+  // Set to 'devnet' for development
+  const network = WalletAdapterNetwork.Devnet;
 
-  const endpoint = useMemo(() => selectedNetwork.endpoint, [selectedNetwork]);
+  // You can also provide a custom RPC endpoint
+  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
 
+  // Initialize wallet adapters
   const wallets = useMemo(
     () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
-    [selectedNetwork.network]
+    [network]
   );
 
   return (
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
-        <WalletModalProvider>
-          <div className="fixed top-4 right-4 z-50">
-            <NetworkSelector
-              currentNetwork={selectedNetwork}
-              onNetworkChange={setSelectedNetwork}
-            />
-          </div>
-          {children}
-        </WalletModalProvider>
+        <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
     </ConnectionProvider>
   );
