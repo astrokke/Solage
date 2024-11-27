@@ -1,13 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
-import { PublicKey, Transaction, SystemProgram } from "@solana/web3.js";
 import { Lock, Wallet, MessageSquare, Clock } from "lucide-react";
 import { ChatMessage } from "./components/ChatMessage";
 import { MessageInput } from "./components/MessageInput";
 import { RecipientInput } from "./components/RecipientInput";
-import { PendingMessage } from "./components/PendingMessage";
-import { FEES_CONFIG } from "./config/fees";
+import { WalletContextProvider } from "./components/WalletContextProvider";
+import { useWebSocket } from "./hooks/useChat";
+import { sendSolanaMessage } from "./utils/solana";
+import { isValidSolanaAddress } from "./utils/wallet";
+import { MESSAGE_FEE, PLATFORM_FEE } from "./utils/constants";
 
 interface Message {
   sender: string;
@@ -15,26 +17,40 @@ interface Message {
   timestamp: Date;
 }
 
-interface PendingMessageType {
-  id: string;
-  sender: string;
-  recipient: string;
-  content: string;
-  timestamp: Date;
-  status: "pending" | "accepted" | "rejected";
-}
-
-function App() {
-  const { publicKey, sendTransaction } = useWallet();
+function ChatApp() {
+  const { publicKey } = useWallet();
   const { connection } = useConnection();
   const [messages, setMessages] = useState<Message[]>([]);
-  const [pendingMessages, setPendingMessages] = useState<PendingMessageType[]>(
-    []
-  );
-  const websocket = useRef<WebSocket | null>(null);
   const [recipientPublicKey, setRecipientPublicKey] = useState("");
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"chat" | "pending">("chat");
+
+  const handleMessage = (data: any) => {
+    if (
+      data.type === "message" &&
+      publicKey &&
+      data.recipient === publicKey.toBase58()
+    ) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: data.sender,
+          content: data.content,
+          timestamp: new Date(data.timestamp),
+        },
+      ]);
+    }
+  };
+
+  const handleError = (error: string) => {
+    setError(error);
+  };
+
+  const { sendMessage } = useWebSocket({
+    publicKey,
+    onMessage: handleMessage,
+    onError: handleError,
+  });
 
   const handleSendMessage = async (content: string) => {
     setError("");
@@ -44,235 +60,45 @@ function App() {
       return;
     }
 
-    try {
-      let recipient;
-      try {
-        recipient = new PublicKey(recipientPublicKey);
-      } catch (e) {
-        setError("Invalid recipient address");
-        return;
-      }
-      const newMessage: Message = {
-        sender: publicKey.toBase58(),
-        content,
-        timestamp: new Date(),
-      };
-      // Envoie le message via WebSocket
-      if (websocket.current) {
-        websocket.current.send(
-          JSON.stringify({
-            type: "message",
-            sender: newMessage.sender,
-            recipient: recipient.toBase58(),
-            content: newMessage.content,
-          })
-        );
-      }
-
-      const tempId = Date.now().toString();
-      const newPendingMsg: PendingMessageType = {
-        id: tempId,
-        sender: publicKey.toBase58(),
-        recipient: recipientPublicKey,
-        content,
-        timestamp: new Date(),
-        status: "pending",
-      };
-
-      setPendingMessages((prev) => [...prev, newPendingMsg]);
-
-      console.log("Preparing transaction instructions");
-      const instructions = [
-        SystemProgram.transfer({
-          fromPubkey: publicKey,
-          toPubkey: recipient,
-          lamports: 1000, // Log le montant exact
-        }),
-      ];
-
-      // Add platform fee if enabled
-      if (FEES_CONFIG.FEES_ENABLED) {
-        instructions.push(
-          SystemProgram.transfer({
-            fromPubkey: publicKey,
-            toPubkey: FEES_CONFIG.FEE_RECIPIENT,
-            lamports: FEES_CONFIG.FEE_AMOUNT,
-          })
-        );
-      }
-      console.log("Transaction Instructions:", instructions);
-      const transaction = new Transaction().add(...instructions);
-      console.log("Fetching latest blockhash");
-      const { blockhash } = await connection.getLatestBlockhash("finalized");
-      transaction.recentBlockhash = blockhash;
-      transaction.feePayer = publicKey;
-      console.log("Sending transaction");
-      const signature = await sendTransaction(transaction, connection);
-      console.log("Transaction Signature:", signature);
-      setPendingMessages((prev) =>
-        prev.map((msg) => (msg.id === tempId ? { ...msg, id: signature } : msg))
-      );
-
-      const confirmation = await connection.confirmTransaction(
-        signature,
-        "confirmed"
-      );
-      console.log("Transaction Confirmation:", confirmation);
-
-      setMessages((prev) => [...prev, newMessage]);
-      if (confirmation.value.err) {
-        console.error(
-          "Transaction Confirmation Error:",
-          confirmation.value.err
-        );
-        setPendingMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === signature ? { ...msg, status: "rejected" } : msg
-          )
-        );
-        throw new Error("Transaction failed");
-      }
-    } catch (error) {
-      console.error("Detailed Error in Send Message:", error);
-      console.error("Error sending message:", error);
-      setError("Failed to send message. Please try again.");
-      if (error instanceof Error) {
-        switch (error.name) {
-          case "WalletSignTransactionError":
-            setError("Wallet refused to sign the transaction");
-            break;
-          case "TransactionError":
-            setError("Transaction failed due to blockchain issues");
-            break;
-          default:
-            setError(`Unexpected error: ${error.message}`);
-        }
-        console.error("Error Name:", error.name);
-        console.error("Error Message:", error.message);
-        console.error("Error Stack:", error.stack);
-      }
-    }
-  };
-
-  const handleAcceptMessage = async (messageId: string) => {
-    setPendingMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId ? { ...msg, status: "accepted" } : msg
-      )
-    );
-
-    const message = pendingMessages.find((msg) => msg.id === messageId);
-    if (message) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: message.sender,
-          content: message.content,
-          timestamp: message.timestamp,
-        },
-      ]);
-    }
-  };
-  const checkWalletBalance = async () => {
-    if (!publicKey) {
-      console.log("No wallet connected");
+    if (!isValidSolanaAddress(recipientPublicKey)) {
+      setError("Invalid recipient address");
       return;
     }
 
     try {
-      const balance = await connection.getBalance(publicKey);
-      console.log(`Wallet Balance: ${balance} lamports (${balance / 1e9} SOL)`);
+      const signature = await sendSolanaMessage(
+        useWallet(),
+        connection,
+        recipientPublicKey,
+        MESSAGE_FEE
+      );
+
+      sendMessage(recipientPublicKey, content);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: publicKey.toBase58(),
+          content,
+          timestamp: new Date(),
+        },
+      ]);
+
+      console.log("Transaction signature:", signature);
     } catch (error) {
-      console.error("Error checking wallet balance:", error);
+      console.error("Error sending message:", error);
+      setError("Failed to send message. Please try again.");
     }
   };
-
-  const handleRejectMessage = (messageId: string) => {
-    setPendingMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId ? { ...msg, status: "rejected" } : msg
-      )
-    );
-  };
-  useEffect(() => {
-    if (publicKey) {
-      checkWalletBalance();
-      websocket.current = new WebSocket("wss://solage-zzum.onrender.com");
-
-      // Authentifie l'utilisateur après la connexion WebSocket
-      websocket.current.onopen = () => {
-        console.log("WebSocket Connection Details:", {
-          url: websocket.current?.url,
-          protocol: websocket.current?.protocol,
-          readyState: websocket.current?.readyState,
-        });
-        const authPayload = JSON.stringify({
-          type: "authenticate",
-          walletAddress: publicKey.toBase58(),
-        });
-        websocket.current?.send(authPayload);
-        console.log("WebSocket connecté et authentifié.");
-      };
-
-      // Gère la fermeture de la connexion
-      websocket.current.onclose = () => {
-        console.log("WebSocket déconnecté.");
-      };
-
-      // Gère les erreurs
-      websocket.current.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        console.error("Detailed WebSocket Error:", {
-          error,
-          url: websocket.current?.url,
-        });
-        setError("WebSocket connection failed");
-      };
-
-      // Nettoie la connexion lors de la déconnexion du wallet
-      return () => {
-        websocket.current?.close();
-      };
-    }
-  }, [publicKey, connection]);
-  useEffect(() => {
-    if (websocket.current) {
-      websocket.current.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-
-        if (data.type === "message") {
-          // Ajoute le message reçu à la liste des messages
-          setMessages((prev) => [
-            ...prev,
-            {
-              sender: data.sender,
-              content: data.content,
-              timestamp: new Date(data.timestamp),
-            },
-          ]);
-        }
-      };
-    }
-  }, [websocket]);
-  useEffect(() => {
-    return () => {
-      if (websocket.current) {
-        websocket.current.close();
-      }
-    };
-  }, []);
 
   const getTotalFees = () => {
-    const messageFee = 1000; // 0.000001 SOL
-    const platformFee = FEES_CONFIG.FEES_ENABLED ? FEES_CONFIG.FEE_AMOUNT : 0;
-    return (messageFee + platformFee) / 1e9; // Convert to SOL
+    return (MESSAGE_FEE + PLATFORM_FEE) / 1e9; // Convert to SOL
   };
 
   return (
     <div className="min-h-screen bg-[#1C1C1C]">
       <div className="container mx-auto px-4 py-8 max-w-3xl">
         <div className="bg-[#2C2C2C] rounded-2xl shadow-xl overflow-hidden border border-[#383838]">
-          {/* Header */}
           <div className="bg-gradient-to-r from-[#9945FF] to-[#14F195] p-0.5">
             <div className="bg-[#2C2C2C] p-4 flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -295,7 +121,6 @@ function App() {
                 onChange={setRecipientPublicKey}
               />
 
-              {/* Tabs */}
               <div className="flex border-b border-[#383838]">
                 <button
                   className={`flex-1 py-3 px-4 ${
@@ -321,61 +146,29 @@ function App() {
                   <div className="flex items-center justify-center gap-2">
                     <Clock className="w-4 h-4" />
                     Pending
-                    {pendingMessages.filter((msg) => msg.status === "pending")
-                      .length > 0 && (
-                      <span className="bg-[#9945FF] text-white rounded-full px-2 py-0.5 text-xs">
-                        {
-                          pendingMessages.filter(
-                            (msg) => msg.status === "pending"
-                          ).length
-                        }
-                      </span>
-                    )}
                   </div>
                 </button>
               </div>
 
-              {/* Messages Area */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#2C2C2C]">
-                {activeTab === "chat" ? (
-                  messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                      <MessageSquare className="w-12 h-12 mb-4 text-[#9945FF]" />
-                      <p>No messages yet. Start chatting!</p>
-                    </div>
-                  ) : (
-                    messages.map((msg, index) => (
-                      <ChatMessage
-                        key={index}
-                        sender={msg.sender}
-                        content={msg.content}
-                        timestamp={msg.timestamp}
-                        isSelf={msg.sender === publicKey.toBase58()}
-                      />
-                    ))
-                  )
-                ) : pendingMessages.length === 0 ? (
+                {messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                    <Clock className="w-12 h-12 mb-4 text-[#9945FF]" />
-                    <p>No pending messages</p>
+                    <MessageSquare className="w-12 h-12 mb-4 text-[#9945FF]" />
+                    <p>No messages yet. Start chatting!</p>
                   </div>
                 ) : (
-                  pendingMessages.map((msg) => (
-                    <PendingMessage
-                      key={msg.id}
+                  messages.map((msg, index) => (
+                    <ChatMessage
+                      key={index}
                       sender={msg.sender}
                       content={msg.content}
                       timestamp={msg.timestamp}
-                      status={msg.status}
-                      isSender={msg.sender === publicKey.toBase58()}
-                      onAccept={() => handleAcceptMessage(msg.id)}
-                      onReject={() => handleRejectMessage(msg.id)}
+                      isSelf={msg.sender === publicKey.toBase58()}
                     />
                   ))
                 )}
               </div>
 
-              {/* Error Message */}
               {error && (
                 <div className="p-3 bg-red-900/20 border-l-4 border-red-500 text-red-400 text-sm">
                   {error}
@@ -402,6 +195,14 @@ function App() {
         </div>
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <WalletContextProvider>
+      <ChatApp />
+    </WalletContextProvider>
   );
 }
 

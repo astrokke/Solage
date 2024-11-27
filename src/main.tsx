@@ -1,14 +1,10 @@
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import { WalletContextProvider } from './components/WalletContextProvider';
-import App from './App';
-import './utils/buffer';
-import './index.css';
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App.tsx";
+import "./index.css";
 
-createRoot(document.getElementById('root')!).render(
+createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <WalletContextProvider>
-      <App />
-    </WalletContextProvider>
+    <App />
   </StrictMode>
 );

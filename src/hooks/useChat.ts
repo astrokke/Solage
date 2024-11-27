@@ -1,81 +1,81 @@
-import { useState, useEffect, useCallback } from "react";
-import { useConnection, useWallet } from "@solana/wallet-adapter-react";
-import { ChatWebSocket } from "../utils/websocket";
-import { sendMessageTransaction } from "../utils/websocket";
+import { useEffect, useRef, useCallback } from "react";
+import { PublicKey } from "@solana/web3.js";
 
-export function useChat() {
-  const { connection } = useConnection();
-  const wallet = useWallet();
-  const [messages, setMessages] = useState<any[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [ws, setWs] = useState<ChatWebSocket | null>(null);
+interface WebSocketHookProps {
+  publicKey: PublicKey | null;
+  onMessage: (message: any) => void;
+  onError: (error: string) => void;
+}
 
-  useEffect(() => {
-    if (wallet.publicKey) {
-      const chatWs = new ChatWebSocket(
-        "wss://solage-56rf.onrender.com",
-        handleMessage,
-        handleError,
-        handleConnectionChange
-      );
+export const useWebSocket = ({
+  publicKey,
+  onMessage,
+  onError,
+}: WebSocketHookProps) => {
+  const websocket = useRef<WebSocket | null>(null);
 
-      chatWs.connect(wallet.publicKey.toString());
-      setWs(chatWs);
+  const connect = useCallback(() => {
+    if (!publicKey) return;
 
-      return () => chatWs.disconnect();
-    }
-  }, [wallet.publicKey]);
+    websocket.current = new WebSocket("wss://solage-zzum.onrender.com");
 
-  const handleMessage = useCallback((data: any) => {
-    if (data.type === "message") {
-      setMessages((prev) => [...prev, data]);
-    }
-  }, []);
+    websocket.current.onopen = () => {
+      console.log("WebSocket connected");
+      if (websocket.current && publicKey) {
+        websocket.current.send(
+          JSON.stringify({
+            type: "authenticate",
+            walletAddress: publicKey.toBase58(),
+          })
+        );
+      }
+    };
 
-  const handleError = useCallback((error: string) => {
-    setError(error);
-    setTimeout(() => setError(null), 5000);
-  }, []);
+    websocket.current.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        onMessage(data);
+      } catch (error) {
+        console.error("Error processing WebSocket message:", error);
+        onError("Failed to process message");
+      }
+    };
 
-  const handleConnectionChange = useCallback((connected: boolean) => {
-    setIsConnected(connected);
-  }, []);
+    websocket.current.onerror = (error) => {
+      console.error("WebSocket error:", error);
+      onError("WebSocket connection error");
+    };
+
+    websocket.current.onclose = () => {
+      console.log("WebSocket disconnected");
+    };
+  }, [publicKey, onMessage, onError]);
 
   const sendMessage = useCallback(
-    async (recipient: string, content: string) => {
-      if (!ws || !wallet.publicKey) {
-        handleError("Wallet not connected");
-        return;
-      }
+    (recipient: string, content: string) => {
+      if (!websocket.current || !publicKey) return;
 
-      try {
-        const signature = await sendMessageTransaction(
-          connection,
-          wallet,
+      websocket.current.send(
+        JSON.stringify({
+          type: "message",
+          sender: publicKey.toBase58(),
           recipient,
-          handleError
-        );
-
-        if (signature) {
-          ws.send({
-            type: "message",
-            recipient,
-            sender: wallet.publicKey.toString(),
-            content,
-          });
-        }
-      } catch (error: any) {
-        handleError(error.message || "Failed to send message");
-      }
+          content,
+        })
+      );
     },
-    [ws, wallet, connection]
+    [publicKey]
   );
 
-  return {
-    messages,
-    isConnected,
-    error,
-    sendMessage,
-  };
-}
+  useEffect(() => {
+    connect();
+
+    return () => {
+      if (websocket.current) {
+        websocket.current.close();
+      }
+    };
+  }, [connect]);
+
+  return { sendMessage };
+};

@@ -16,12 +16,19 @@ wss.on("connection", (socket) => {
   socket.on("message", (message) => {
     try {
       const data = JSON.parse(message);
-      console.log("Received message:", data);
+      console.log("Detailed Message Received:", {
+        type: data.type,
+        sender: data.sender,
+        recipient: data.recipient,
+        content: data.content,
+      });
 
       if (data.type === "authenticate") {
         userWalletAddress = data.walletAddress;
         clients.set(userWalletAddress, socket);
         console.log(`User authenticated: ${userWalletAddress}`);
+
+        // Log tous les clients connectés
 
         socket.send(
           JSON.stringify({
@@ -37,13 +44,18 @@ wss.on("connection", (socket) => {
         console.log(
           `Attempting to send message from ${sender} to ${recipient}`
         );
-
+        console.log(`Searching for recipient socket: ${recipient}`);
+        console.log("Connected Clients:", Array.from(clients.keys()));
         const recipientSocket = clients.get(recipient);
-
+        console.log("Recipient Socket Status:", {
+          exists: !!recipientSocket,
+          readyState: recipientSocket ? recipientSocket.readyState : "N/A",
+        });
         if (recipientSocket && recipientSocket.readyState === 1) {
           const messageData = JSON.stringify({
             type: "message",
             sender,
+            recipient,
             content,
             timestamp: new Date().toISOString(),
           });
