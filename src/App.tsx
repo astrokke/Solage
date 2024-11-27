@@ -68,6 +68,7 @@ function App() {
           })
         );
       }
+
       const tempId = Date.now().toString();
       const newPendingMsg: PendingMessageType = {
         id: tempId,
@@ -80,13 +81,12 @@ function App() {
 
       setPendingMessages((prev) => [...prev, newPendingMsg]);
 
-      // Create transaction instructions
+      console.log("Preparing transaction instructions");
       const instructions = [
-        // Message fee transfer (1000 lamports)
         SystemProgram.transfer({
           fromPubkey: publicKey,
           toPubkey: recipient,
-          lamports: 1000,
+          lamports: 1000, // Log le montant exact
         }),
       ];
 
@@ -100,15 +100,15 @@ function App() {
           })
         );
       }
-
+      console.log("Transaction Instructions:", instructions);
       const transaction = new Transaction().add(...instructions);
-
+      console.log("Fetching latest blockhash");
       const { blockhash } = await connection.getLatestBlockhash("finalized");
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
-
+      console.log("Sending transaction");
       const signature = await sendTransaction(transaction, connection);
-
+      console.log("Transaction Signature:", signature);
       setPendingMessages((prev) =>
         prev.map((msg) => (msg.id === tempId ? { ...msg, id: signature } : msg))
       );
@@ -117,8 +117,14 @@ function App() {
         signature,
         "confirmed"
       );
+      console.log("Transaction Confirmation:", confirmation);
+
       setMessages((prev) => [...prev, newMessage]);
       if (confirmation.value.err) {
+        console.error(
+          "Transaction Confirmation Error:",
+          confirmation.value.err
+        );
         setPendingMessages((prev) =>
           prev.map((msg) =>
             msg.id === signature ? { ...msg, status: "rejected" } : msg
@@ -127,8 +133,24 @@ function App() {
         throw new Error("Transaction failed");
       }
     } catch (error) {
+      console.error("Detailed Error in Send Message:", error);
       console.error("Error sending message:", error);
       setError("Failed to send message. Please try again.");
+      if (error instanceof Error) {
+        switch (error.name) {
+          case "WalletSignTransactionError":
+            setError("Wallet refused to sign the transaction");
+            break;
+          case "TransactionError":
+            setError("Transaction failed due to blockchain issues");
+            break;
+          default:
+            setError(`Unexpected error: ${error.message}`);
+        }
+        console.error("Error Name:", error.name);
+        console.error("Error Message:", error.message);
+        console.error("Error Stack:", error.stack);
+      }
     }
   };
 
@@ -151,6 +173,19 @@ function App() {
       ]);
     }
   };
+  const checkWalletBalance = async () => {
+    if (!publicKey) {
+      console.log("No wallet connected");
+      return;
+    }
+
+    try {
+      const balance = await connection.getBalance(publicKey);
+      console.log(`Wallet Balance: ${balance} lamports (${balance / 1e9} SOL)`);
+    } catch (error) {
+      console.error("Error checking wallet balance:", error);
+    }
+  };
 
   const handleRejectMessage = (messageId: string) => {
     setPendingMessages((prev) =>
@@ -161,11 +196,16 @@ function App() {
   };
   useEffect(() => {
     if (publicKey) {
-      // Connecte au serveur WebSocket
+      checkWalletBalance();
       websocket.current = new WebSocket("wss://solage-zzum.onrender.com");
 
       // Authentifie l'utilisateur après la connexion WebSocket
       websocket.current.onopen = () => {
+        console.log("WebSocket Connection Details:", {
+          url: websocket.current?.url,
+          protocol: websocket.current?.protocol,
+          readyState: websocket.current?.readyState,
+        });
         const authPayload = JSON.stringify({
           type: "authenticate",
           walletAddress: publicKey.toBase58(),
@@ -182,6 +222,11 @@ function App() {
       // Gère les erreurs
       websocket.current.onerror = (error) => {
         console.error("WebSocket error:", error);
+        console.error("Detailed WebSocket Error:", {
+          error,
+          url: websocket.current?.url,
+        });
+        setError("WebSocket connection failed");
       };
 
       // Nettoie la connexion lors de la déconnexion du wallet
@@ -189,7 +234,7 @@ function App() {
         websocket.current?.close();
       };
     }
-  }, [publicKey]);
+  }, [publicKey, connection]);
   useEffect(() => {
     if (websocket.current) {
       websocket.current.onmessage = (event) => {
