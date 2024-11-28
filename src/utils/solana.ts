@@ -5,7 +5,6 @@ import {
   SystemProgram,
 } from "@solana/web3.js";
 import { WalletContextState } from "@solana/wallet-adapter-react";
-import { FEES_CONFIG } from "../config/fees";
 
 export const sendSolanaMessage = async (
   wallet: WalletContextState,
@@ -13,6 +12,14 @@ export const sendSolanaMessage = async (
   recipientAddress: string,
   amount: number
 ) => {
+  // Vérification du solde
+  const balance = await connection.getBalance(wallet.publicKey!);
+  const totalNecessaire = amount + 5000; // Ajout des frais de transaction
+
+  if (balance < totalNecessaire) {
+    throw new Error(`Solde insuffisant. Il faut ${totalNecessaire / 1e9} SOL`);
+  }
+
   try {
     if (!wallet.publicKey) {
       throw new Error("Wallet public key is undefined");
@@ -41,6 +48,10 @@ export const sendSolanaMessage = async (
     return signature;
   } catch (error) {
     console.error("Transaction error details:", error);
-    throw new Error(`Transaction failed: ${error.message}`);
+    throw new Error(
+      `Transaction failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
 };
