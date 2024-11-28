@@ -1,6 +1,6 @@
 export const FEES_CONFIG = {
   // Your wallet address to receive fees
-  FEE_RECIPIENT: "ES3n6T1dzsL8C9okcrD1ighZAJ5HJAm8n55hJSYth95v", // Replace with your wallet address
+  FEE_RECIPIENT: "D3MJrTSEdW4QSu7byd5mjVGMe4mHXH97VPy7NVVXSdzK", // Replace with your wallet address
   // Fee amount in lamports (1 SOL = 1,000,000,000 lamports)
   FEE_AMOUNT: 500, // 0.0000005 SOL per message
   // Enable/disable fees

@@ -6,7 +6,7 @@ import { ChatMessage } from "./components/ChatMessage";
 import { MessageInput } from "./components/MessageInput";
 import { RecipientInput } from "./components/RecipientInput";
 import { WalletContextProvider } from "./components/WalletContextProvider";
-import { useWebSocket } from "./hooks/useChat";
+import { useMessaging } from "./hooks/useChat";
 import { sendSolanaMessage } from "./utils/solana";
 import { isValidSolanaAddress } from "./utils/wallet";
 import { MESSAGE_FEE, PLATFORM_FEE } from "./utils/constants";
@@ -20,37 +20,12 @@ interface Message {
 function ChatApp() {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
-  const [messages, setMessages] = useState<Message[]>([]);
   const [recipientPublicKey, setRecipientPublicKey] = useState("");
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"chat" | "pending">("chat");
 
-  const handleMessage = (data: any) => {
-    if (
-      data.type === "message" &&
-      publicKey &&
-      data.recipient === publicKey.toBase58()
-    ) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: data.sender,
-          content: data.content,
-          timestamp: new Date(data.timestamp),
-        },
-      ]);
-    }
-  };
-
-  const handleError = (error: string) => {
-    setError(error);
-  };
-
-  const { sendMessage } = useWebSocket({
-    publicKey,
-    onMessage: handleMessage,
-    onError: handleError,
-  });
+  const { conversations, sendMessage, acceptConversation, rejectConversation } =
+    useMessaging();
 
   const handleSendMessage = async (content: string) => {
     setError("");
@@ -73,17 +48,7 @@ function ChatApp() {
         MESSAGE_FEE
       );
 
-      sendMessage(recipientPublicKey, content);
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: publicKey.toBase58(),
-          content,
-          timestamp: new Date(),
-        },
-      ]);
-
+      await sendMessage(recipientPublicKey, content);
       console.log("Transaction signature:", signature);
     } catch (error) {
       console.error("Error sending message:", error);
@@ -151,21 +116,62 @@ function ChatApp() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#2C2C2C]">
-                {messages.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                    <MessageSquare className="w-12 h-12 mb-4 text-[#9945FF]" />
-                    <p>No messages yet. Start chatting!</p>
-                  </div>
+                {activeTab === "chat" ? (
+                  conversations.filter((conv) => conv.status === "active")
+                    .length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                      <MessageSquare className="w-12 h-12 mb-4 text-[#9945FF]" />
+                      <p>No messages yet. Start chatting!</p>
+                    </div>
+                  ) : (
+                    conversations
+                      .filter((conv) => conv.status === "active")
+                      .map((conversation) =>
+                        conversation.messages.map((msg, index) => (
+                          <ChatMessage
+                            key={index}
+                            sender={msg.sender}
+                            content={msg.content}
+                            timestamp={new Date(msg.timestamp)}
+                            isSelf={msg.sender === publicKey?.toBase58()}
+                          />
+                        ))
+                      )
+                  )
                 ) : (
-                  messages.map((msg, index) => (
-                    <ChatMessage
-                      key={index}
-                      sender={msg.sender}
-                      content={msg.content}
-                      timestamp={msg.timestamp}
-                      isSelf={msg.sender === publicKey.toBase58()}
-                    />
-                  ))
+                  // Pending messages tab
+                  conversations
+                    .filter((conv) => conv.status === "pending")
+                    .map((conversation) => (
+                      <div
+                        key={conversation.id}
+                        className="flex justify-between items-center"
+                      >
+                        <ChatMessage
+                          sender={conversation.messages[0].sender}
+                          content={conversation.messages[0].content}
+                          timestamp={
+                            new Date(conversation.messages[0].timestamp)
+                          }
+                          isSelf={
+                            conversation.messages[0].sender ===
+                            publicKey?.toBase58()
+                          }
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => acceptConversation(conversation.id)}
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => rejectConversation(conversation.id)}
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    ))
                 )}
               </div>
 

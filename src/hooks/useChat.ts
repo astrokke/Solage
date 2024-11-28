@@ -1,81 +1,181 @@
-import { useEffect, useRef, useCallback } from "react";
-import { PublicKey } from "@solana/web3.js";
+import { useCallback, useEffect, useState } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { io, Socket } from "socket.io-client";
+import type { Conversation, Message } from "../types/message";
 
-interface WebSocketHookProps {
-  publicKey: PublicKey | null;
-  onMessage: (message: any) => void;
-  onError: (error: string) => void;
-}
+export const useMessaging = () => {
+  const { publicKey } = useWallet();
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-export const useWebSocket = ({
-  publicKey,
-  onMessage,
-  onError,
-}: WebSocketHookProps) => {
-  const websocket = useRef<WebSocket | null>(null);
-
-  const connect = useCallback(() => {
+  // Établir la connexion Socket.IO
+  useEffect(() => {
     if (!publicKey) return;
 
-    websocket.current = new WebSocket("wss://solage-zzum.onrender.com");
+    // Créer la connexion Socket.IO
+    const newSocket = io("wss://solage-zzum.onrender.com", {
+      auth: {
+        walletAddress: publicKey.toBase58(),
+      },
+    });
 
-    websocket.current.onopen = () => {
-      console.log("WebSocket connected");
-      if (websocket.current && publicKey) {
-        websocket.current.send(
-          JSON.stringify({
-            type: "authenticate",
-            walletAddress: publicKey.toBase58(),
-          })
+    // Gérer la connexion
+    newSocket.on("connect", () => {
+      console.log("Connecté au serveur de messagerie");
+      // Demander les messages en attente
+      newSocket.emit("fetch_pending_messages");
+    });
+
+    // Gérer les erreurs de connexion
+    newSocket.on("connect_error", (err) => {
+      console.error("Erreur de connexion:", err);
+      setError("Impossible de se connecter au serveur de messagerie");
+    });
+
+    // Recevoir les messages en attente
+    newSocket.on("pending_messages", (messages: Message[]) => {
+      const address = publicKey.toBase58();
+      const conversationMap = new Map<string, Conversation>();
+
+      messages.forEach((message) => {
+        const otherParty =
+          message.sender === address ? message.recipient : message.sender;
+        const existing = conversationMap.get(otherParty);
+
+        if (existing) {
+          existing.messages.push(message);
+        } else {
+          conversationMap.set(otherParty, {
+            id: message.id,
+            participants: [address, otherParty],
+            messages: [message],
+            createdAt: message.timestamp,
+            expiresAt: message.timestamp + 24 * 60 * 60 * 1000,
+            status: "pending",
+          });
+        }
+      });
+
+      setConversations(Array.from(conversationMap.values()));
+    });
+
+    // Recevoir de nouveaux messages
+    newSocket.on("new_message", (message: Message) => {
+      setConversations((prev) => {
+        const address = publicKey.toBase58();
+        const existing = prev.find((conv) =>
+          conv.participants.includes(message.sender)
         );
-      }
-    };
 
-    websocket.current.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        onMessage(data);
-      } catch (error) {
-        console.error("Error processing WebSocket message:", error);
-        onError("Failed to process message");
-      }
-    };
+        if (existing) {
+          return prev.map((conv) =>
+            conv.id === existing.id
+              ? { ...conv, messages: [...conv.messages, message] }
+              : conv
+          );
+        }
 
-    websocket.current.onerror = (error) => {
-      console.error("WebSocket error:", error);
-      onError("WebSocket connection error");
-    };
+        const newConversation: Conversation = {
+          id: message.id,
+          participants: [address, message.sender],
+          messages: [message],
+          createdAt: message.timestamp,
+          expiresAt: message.timestamp + 24 * 60 * 60 * 1000,
+          status: "pending",
+        };
 
-    websocket.current.onclose = () => {
-      console.log("WebSocket disconnected");
-    };
-  }, [publicKey, onMessage, onError]);
+        return [...prev, newConversation];
+      });
+    });
 
+    // Définir le socket
+    setSocket(newSocket);
+
+    // Nettoyer la connexion
+    return () => {
+      newSocket.disconnect();
+    };
+  }, [publicKey]);
+
+  // Envoyer un message
   const sendMessage = useCallback(
-    (recipient: string, content: string) => {
-      if (!websocket.current || !publicKey) return;
+    async (recipientAddress: string, content: string) => {
+      if (!socket || !publicKey) {
+        setError("Connexion non établie");
+        return;
+      }
 
-      websocket.current.send(
-        JSON.stringify({
-          type: "message",
+      try {
+        setLoading(true);
+        setError(null);
+
+        const message = {
           sender: publicKey.toBase58(),
-          recipient,
+          recipient: recipientAddress,
           content,
-        })
-      );
+          timestamp: Date.now(),
+        };
+
+        // Émettre l'événement d'envoi de message
+        socket.emit("send_message", message);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Échec de l'envoi du message"
+        );
+        throw err;
+      } finally {
+        setLoading(false);
+      }
     },
-    [publicKey]
+    [socket, publicKey]
   );
 
+  // Accepter une conversation
+  const acceptConversation = useCallback(
+    (conversationId: string) => {
+      if (!socket) return;
+
+      socket.emit("accept_conversation", conversationId);
+      setConversations((prev) =>
+        prev.map((conv) =>
+          conv.id === conversationId ? { ...conv, status: "active" } : conv
+        )
+      );
+    },
+    [socket]
+  );
+
+  // Rejeter une conversation
+  const rejectConversation = useCallback(
+    (conversationId: string) => {
+      if (!socket) return;
+
+      socket.emit("reject_conversation", conversationId);
+      setConversations((prev) =>
+        prev.filter((conv) => conv.id !== conversationId)
+      );
+    },
+    [socket]
+  );
+
+  // Nettoyer les conversations expirées
   useEffect(() => {
-    connect();
+    const cleanup = setInterval(() => {
+      const now = Date.now();
+      setConversations((prev) => prev.filter((conv) => conv.expiresAt > now));
+    }, 60000);
 
-    return () => {
-      if (websocket.current) {
-        websocket.current.close();
-      }
-    };
-  }, [connect]);
+    return () => clearInterval(cleanup);
+  }, []);
 
-  return { sendMessage };
+  return {
+    conversations,
+    loading,
+    error,
+    sendMessage,
+    acceptConversation,
+    rejectConversation,
+  };
 };
