@@ -24,6 +24,17 @@ export const useMessaging = () => {
       reconnectionAttempts: 5,
     });
 
+    newSocket.on("connect", () => {
+      console.log("Connected to chat server");
+      setError(null);
+    });
+
+    newSocket.on("disconnect", (reason) => {
+      console.log("Disconnected:", reason);
+      if (reason === "io server disconnect") {
+        newSocket.connect();
+      }
+    });
     newSocket.on("connect_error", (err) => {
       console.error("Connection error:", err);
       setError("Connection failed - retrying...");

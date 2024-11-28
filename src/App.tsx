@@ -18,7 +18,8 @@ interface Message {
 }
 
 function ChatApp() {
-  const { publicKey } = useWallet();
+  const wallet = useWallet(); // Get wallet instance at component level
+  const { publicKey } = wallet;
   const { connection } = useConnection();
   const [recipientPublicKey, setRecipientPublicKey] = useState("");
   const [error, setError] = useState("");
@@ -42,7 +43,7 @@ function ChatApp() {
 
     try {
       const signature = await sendSolanaMessage(
-        useWallet(),
+        wallet, // Use the wallet instance from above
         connection,
         recipientPublicKey,
         MESSAGE_FEE
