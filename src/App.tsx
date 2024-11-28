@@ -10,12 +10,7 @@ import { useMessaging } from "./hooks/useChat";
 import { sendSolanaMessage } from "./utils/solana";
 import { isValidSolanaAddress } from "./utils/wallet";
 import { MESSAGE_FEE, PLATFORM_FEE } from "./utils/constants";
-
-interface Message {
-  sender: string;
-  content: string;
-  timestamp: Date;
-}
+import "./utils/buffer";
 
 function ChatApp() {
   const wallet = useWallet(); // Get wallet instance at component level

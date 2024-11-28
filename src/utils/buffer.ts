@@ -1,4 +1,7 @@
-import { Buffer } from 'buffer';
+import { Buffer } from "buffer";
 
-// Polyfill Buffer for the browser environment
-window.Buffer = Buffer;
+if (typeof window !== "undefined") {
+  window.Buffer = window.Buffer || Buffer;
+}
+
+export { Buffer };
