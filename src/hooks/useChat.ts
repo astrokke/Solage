@@ -14,15 +14,18 @@ export const useMessaging = () => {
   useEffect(() => {
     if (!publicKey) return;
 
-    const newSocket = io("https://solage-zzum.onrender.com", {
+    const socketOptions = {
       auth: {
         walletAddress: publicKey.toBase58(),
       },
-      transports: ["websocket"],
-      timeout: 10000,
+      transports: ["websocket", "polling"],
+      timeout: 30000,
       reconnection: true,
       reconnectionAttempts: 5,
-    });
+      reconnectionDelay: 2000,
+    };
+
+    const newSocket = io("https://solage-zzum.onrender.com", socketOptions);
 
     newSocket.on("connect", () => {
       console.log("Connected to chat server");
