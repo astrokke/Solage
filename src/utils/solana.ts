@@ -14,11 +14,15 @@ export const sendSolanaMessage = async (
 ) => {
   // Vérification du solde
   const balance = await connection.getBalance(wallet.publicKey!);
-  const totalNecessaire = amount + 5000; // Ajout des frais de transaction
+  const totalNecessaire = amount + 10000; // Ajout des frais de transaction
 
   if (balance < totalNecessaire) {
     throw new Error(`Solde insuffisant. Il faut ${totalNecessaire / 1e9} SOL`);
   }
+  console.log("Starting transaction...");
+  console.log("Wallet public key:", wallet.publicKey?.toBase58());
+  console.log("Recipient address:", recipientAddress);
+  console.log("Amount:", amount);
 
   try {
     if (!wallet.publicKey) {
