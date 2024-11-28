@@ -14,86 +14,28 @@ export const useMessaging = () => {
   useEffect(() => {
     if (!publicKey) return;
 
-    // Créer la connexion Socket.IO
-    const newSocket = io("wss://solage-zzum.onrender.com", {
+    const newSocket = io("https://solage-zzum.onrender.com", {
       auth: {
         walletAddress: publicKey.toBase58(),
       },
+      transports: ["websocket"],
+      timeout: 10000,
+      reconnection: true,
+      reconnectionAttempts: 5,
     });
 
-    // Gérer la connexion
-    newSocket.on("connect", () => {
-      console.log("Connecté au serveur de messagerie");
-      // Demander les messages en attente
-      newSocket.emit("fetch_pending_messages");
-    });
-
-    // Gérer les erreurs de connexion
     newSocket.on("connect_error", (err) => {
-      console.error("Erreur de connexion:", err);
-      setError("Impossible de se connecter au serveur de messagerie");
+      console.error("Connection error:", err);
+      setError("Connection failed - retrying...");
     });
 
-    // Recevoir les messages en attente
-    newSocket.on("pending_messages", (messages: Message[]) => {
-      const address = publicKey.toBase58();
-      const conversationMap = new Map<string, Conversation>();
-
-      messages.forEach((message) => {
-        const otherParty =
-          message.sender === address ? message.recipient : message.sender;
-        const existing = conversationMap.get(otherParty);
-
-        if (existing) {
-          existing.messages.push(message);
-        } else {
-          conversationMap.set(otherParty, {
-            id: message.id,
-            participants: [address, otherParty],
-            messages: [message],
-            createdAt: message.timestamp,
-            expiresAt: message.timestamp + 24 * 60 * 60 * 1000,
-            status: "pending",
-          });
-        }
-      });
-
-      setConversations(Array.from(conversationMap.values()));
+    newSocket.on("reconnect", (attemptNumber) => {
+      console.log("Reconnected after", attemptNumber, "attempts");
+      setError(null);
     });
 
-    // Recevoir de nouveaux messages
-    newSocket.on("new_message", (message: Message) => {
-      setConversations((prev) => {
-        const address = publicKey.toBase58();
-        const existing = prev.find((conv) =>
-          conv.participants.includes(message.sender)
-        );
-
-        if (existing) {
-          return prev.map((conv) =>
-            conv.id === existing.id
-              ? { ...conv, messages: [...conv.messages, message] }
-              : conv
-          );
-        }
-
-        const newConversation: Conversation = {
-          id: message.id,
-          participants: [address, message.sender],
-          messages: [message],
-          createdAt: message.timestamp,
-          expiresAt: message.timestamp + 24 * 60 * 60 * 1000,
-          status: "pending",
-        };
-
-        return [...prev, newConversation];
-      });
-    });
-
-    // Définir le socket
     setSocket(newSocket);
 
-    // Nettoyer la connexion
     return () => {
       newSocket.disconnect();
     };
