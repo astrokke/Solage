@@ -14,6 +14,11 @@ export const NETWORKS: NetworkConfig[] = [
 
     network: WalletAdapterNetwork.Mainnet,
   },
+  {
+    name: "Devnet",
+    endpoint: "https://api.devnet.solana.com",
+    network: WalletAdapterNetwork.Devnet,
+  },
 ];
 
 export const DEFAULT_NETWORK = NETWORKS[0];

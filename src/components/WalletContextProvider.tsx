@@ -18,21 +18,16 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  const network = WalletAdapterNetwork.Mainnet;
+  const network = WalletAdapterNetwork.Devnet;
   const endpoint = useMemo(() => clusterApiUrl(network), [network]);
-  const config = {
-    httpHeaders: {
-      "x-api-key":
-        "https://sleek-boldest-panorama.solana-mainnet.quiknode.pro/877bad8f90454ed409a9a63dbf2ca05496e9e146/",
-    },
-  };
+
   const wallets = useMemo(
     () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
     []
   );
 
   return (
-    <ConnectionProvider endpoint={endpoint} config={config}>
+    <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>{children}</WalletModalProvider>
       </WalletProvider>
