@@ -14,7 +14,7 @@ export const useMessaging = () => {
   useEffect(() => {
     if (!publicKey) return;
 
-    const socketUrl = "wss://solage-zzum.onrender.com:10000";
+    const socketUrl = "wss://solage-zzum.onrender.com";
 
     const socketOptions = {
       auth: {

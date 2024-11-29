@@ -7,8 +7,9 @@ const wss = new WebSocketServer({ server });
 
 const clients = new Map();
 
-console.log(`WebSocket server running on port ${port}`);
-
+server.listen(PORT, () => {
+  console.log(`WebSocket server running on port ${PORT}`);
+});
 wss.on("connection", (socket) => {
   console.log("Client connected");
   let userWalletAddress = null;
