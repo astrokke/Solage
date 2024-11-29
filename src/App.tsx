@@ -30,6 +30,7 @@ function ChatApp() {
                 value={recipientAddress}
                 onChange={setRecipientAddress}
               />
+
               {recipientAddress ? (
                 <Chat recipientAddress={recipientAddress} />
               ) : (

@@ -10,7 +10,8 @@ interface ChatProps {
 }
 
 export const Chat: FC<ChatProps> = ({ recipientAddress }) => {
-  const { publicKey } = useWallet();
+  const wallet = useWallet();
+  const { publicKey } = wallet;
   const { connection } = useConnection();
   const [error, setError] = useState<string | null>(null);
   const {
@@ -31,7 +32,7 @@ export const Chat: FC<ChatProps> = ({ recipientAddress }) => {
 
       // First send the Solana transaction
       const signature = await sendSolanaMessage(
-        useWallet(),
+        wallet,
         connection,
         recipientAddress
       );
