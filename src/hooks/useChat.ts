@@ -29,6 +29,8 @@ export const useMessaging = () => {
     };
 
     const newSocket = io(socketUrl, socketOptions);
+
+    // Connection event handlers
     newSocket.on("connect", () => {
       console.log("Connected to chat server");
       setError(null);
@@ -40,14 +42,49 @@ export const useMessaging = () => {
         newSocket.connect();
       }
     });
-    newSocket.on("connect_error", (err) => {
-      console.error("Connection error:", err);
-      setError("Connection failed - retrying...");
+
+    // Message handling
+    newSocket.on("message", (message: Message) => {
+      console.log("Received message:", message);
+      setConversations((prevConversations) => {
+        const conversationExists = prevConversations.find(
+          (conv) =>
+            conv.participants.includes(message.sender) &&
+            conv.participants.includes(message.recipient)
+        );
+
+        if (conversationExists) {
+          return prevConversations.map((conv) =>
+            conv.id === conversationExists.id
+              ? {
+                  ...conv,
+                  messages: [...conv.messages, message],
+                  lastMessageAt: message.timestamp,
+                }
+              : conv
+          );
+        } else {
+          // Create new conversation
+          const newConversation: Conversation = {
+            id: `${message.sender}-${message.recipient}-${Date.now()}`,
+            participants: [message.sender, message.recipient],
+            messages: [message],
+            status: "active",
+            lastMessageAt: message.timestamp,
+            expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
+          };
+          return [...prevConversations, newConversation];
+        }
+      });
     });
 
-    newSocket.on("reconnect", (attemptNumber) => {
-      console.log("Reconnected after", attemptNumber, "attempts");
-      setError(null);
+    newSocket.on("message_sent", (confirmation) => {
+      console.log("Message sent confirmation:", confirmation);
+    });
+
+    newSocket.on("message_error", (error) => {
+      console.error("Message error:", error);
+      setError("Failed to deliver message");
     });
 
     setSocket(newSocket);
@@ -57,11 +94,11 @@ export const useMessaging = () => {
     };
   }, [publicKey]);
 
-  // Envoyer un message
+  // Send message function
   const sendMessage = useCallback(
     async (recipientAddress: string, content: string) => {
       if (!socket || !publicKey) {
-        setError("Connexion non établie");
+        setError("Connection not established");
         return;
       }
 
@@ -69,19 +106,50 @@ export const useMessaging = () => {
         setLoading(true);
         setError(null);
 
-        const message = {
+        const message: Message = {
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
           sender: publicKey.toBase58(),
           recipient: recipientAddress,
           content,
           timestamp: Date.now(),
+          status: "sent",
         };
 
-        // Émettre l'événement d'envoi de message
+        // Add message to local state immediately for UI feedback
+        setConversations((prevConversations) => {
+          const conversationExists = prevConversations.find(
+            (conv) =>
+              conv.participants.includes(message.sender) &&
+              conv.participants.includes(message.recipient)
+          );
+
+          if (conversationExists) {
+            return prevConversations.map((conv) =>
+              conv.id === conversationExists.id
+                ? {
+                    ...conv,
+                    messages: [...conv.messages, message],
+                    lastMessageAt: message.timestamp,
+                  }
+                : conv
+            );
+          } else {
+            const newConversation: Conversation = {
+              id: `${message.sender}-${message.recipient}-${Date.now()}`,
+              participants: [message.sender, message.recipient],
+              messages: [message],
+              status: "active",
+              lastMessageAt: message.timestamp,
+              expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+            };
+            return [...prevConversations, newConversation];
+          }
+        });
+
+        // Emit the message through socket
         socket.emit("send_message", message);
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Échec de l'envoi du message"
-        );
+        setError(err instanceof Error ? err.message : "Failed to send message");
         throw err;
       } finally {
         setLoading(false);
@@ -90,7 +158,7 @@ export const useMessaging = () => {
     [socket, publicKey]
   );
 
-  // Accepter une conversation
+  // Other functions remain the same...
   const acceptConversation = useCallback(
     (conversationId: string) => {
       if (!socket) return;
@@ -105,7 +173,6 @@ export const useMessaging = () => {
     [socket]
   );
 
-  // Rejeter une conversation
   const rejectConversation = useCallback(
     (conversationId: string) => {
       if (!socket) return;
@@ -118,7 +185,7 @@ export const useMessaging = () => {
     [socket]
   );
 
-  // Nettoyer les conversations expirées
+  // Cleanup expired conversations
   useEffect(() => {
     const cleanup = setInterval(() => {
       const now = Date.now();

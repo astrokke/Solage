@@ -81,7 +81,14 @@ wss.on("connection", (socket) => {
       });
     }
   });
-
+  socket.on("send_message", (message) => {
+    // Logique de traitement du message
+    console.log("Sending message:", message);
+    io.to(recipientSocketId).emit("message", message);
+    console.log('Emitted "message" event to recipient');
+    socket.emit("message_sent", { status: "success", messageId: message.id });
+    console.log('Emitted "message_sent" event to sender');
+  });
   socket.on("close", () => {
     if (userWalletAddress) {
       console.log(`User disconnected: ${userWalletAddress}`);

@@ -13,7 +13,7 @@ import { MESSAGE_FEE, PLATFORM_FEE } from "./utils/constants";
 import "./utils/buffer";
 
 function ChatApp() {
-  const wallet = useWallet(); // Get wallet instance at component level
+  const wallet = useWallet();
   const { publicKey } = wallet;
   const { connection } = useConnection();
   const [recipientPublicKey, setRecipientPublicKey] = useState("");
