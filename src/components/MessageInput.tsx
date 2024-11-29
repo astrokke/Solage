@@ -4,11 +4,13 @@ import { Send } from "lucide-react";
 interface MessageInputProps {
   onSendMessage: (content: string) => void;
   disabled?: boolean;
+  placeholder?: string;
 }
 
 export const MessageInput: FC<MessageInputProps> = ({
   onSendMessage,
   disabled,
+  placeholder = "Type your message...",
 }) => {
   const [message, setMessage] = useState("");
 
@@ -27,9 +29,7 @@ export const MessageInput: FC<MessageInputProps> = ({
           type="text"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
-          placeholder={
-            disabled ? "Enter recipient address first" : "Type your message..."
-          }
+          placeholder={disabled ? "Enter recipient address first" : placeholder}
           disabled={disabled}
           className="flex-1 bg-[#1C1C1C] text-white rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#9945FF] disabled:opacity-50"
         />
