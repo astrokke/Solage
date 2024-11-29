@@ -4,7 +4,7 @@ import { MessageInput } from "./MessageInput";
 import { ChatMessage } from "./ChatMessage";
 import { useChat } from "../hooks/useChat";
 import { sendSolanaMessage } from "../utils/solana";
-
+import { Buffer } from "../utils/buffer";
 interface ChatProps {
   recipientAddress: string;
 }
@@ -29,7 +29,7 @@ export const Chat: FC<ChatProps> = ({ recipientAddress }) => {
 
     try {
       setError(null);
-
+      window.Buffer = Buffer;
       // First send the Solana transaction
       const signature = await sendSolanaMessage(
         wallet,
