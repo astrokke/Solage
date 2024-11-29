@@ -7,12 +7,12 @@ export type NetworkConfig = {
 };
 
 export const NETWORKS: NetworkConfig[] = [
-
   {
     name: "Mainnet",
-    endpoint: "https://api.mainnet-beta.solana.com",
+    endpoint:
+      "https://sleek-boldest-panorama.solana-mainnet.quiknode.pro/877bad8f90454ed409a9a63dbf2ca05496e9e146",
     network: WalletAdapterNetwork.Mainnet,
   },
 ];
 
-export const DEFAULT_NETWORK = NETWORKS[0]; 
+export const DEFAULT_NETWORK = NETWORKS[0];
