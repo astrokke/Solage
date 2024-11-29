@@ -14,8 +14,7 @@ export const useMessaging = () => {
   useEffect(() => {
     if (!publicKey) return;
 
-    const socketUrl =
-      "wss://sleek-boldest-panorama.solana-mainnet.quiknode.pro/877bad8f90454ed409a9a63dbf2ca05496e9e146";
+    const socketUrl = "wss://solage-zzum.onrender.com:10000";
 
     const socketOptions = {
       auth: {
