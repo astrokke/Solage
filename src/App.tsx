@@ -6,14 +6,14 @@ import { WalletContextProvider } from "./components/WalletContextProvider";
 import { WebSocketClient } from "./utils/websocket";
 import { createMessageTransaction } from "./utils/transaction";
 import { FEES_CONFIG } from "./config/fees";
-
+import { Buffer } from "./utils/buffer";
 interface Message {
   sender: string;
   content: string;
   timestamp: Date;
   isSelf: boolean;
 }
-
+window.Buffer = Buffer;
 function ChatApp() {
   const { publicKey, sendTransaction } = useWallet();
   const { connection } = useConnection();
