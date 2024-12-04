@@ -43,6 +43,10 @@ export const useChat = (
             walletAddress: publicKey.toBase58(),
           })
         );
+        console.log(
+          "Sent authentication message for wallet:",
+          publicKey.toBase58()
+        );
       }
     };
 

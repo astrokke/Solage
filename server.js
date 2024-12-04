@@ -27,13 +27,10 @@ wss.on("connection", (socket) => {
   let userWalletAddress = null;
 
   socket.on("message", (message) => {
+    console.log("Message received from client:", message);
     try {
       const data = JSON.parse(message);
-      console.log("Message Received:", {
-        type: data.type,
-        sender: data.sender,
-        recipient: data.recipient,
-      });
+      console.log("Parsed message data:", data);
 
       if (data.type === "authenticate") {
         userWalletAddress = data.walletAddress;
@@ -49,6 +46,9 @@ wss.on("connection", (socket) => {
 
       if (data.type === "message") {
         const { recipient, sender, content } = data;
+        console.log(
+          `Sending message from ${sender} to ${recipient}: ${content}`
+        );
         const recipientSocket = clients.get(recipient);
 
         if (recipientSocket && recipientSocket.readyState === 1) {
@@ -59,13 +59,13 @@ wss.on("connection", (socket) => {
             content,
             timestamp: new Date().toISOString(),
           });
-
           safeSend(socket, {
             type: "message_sent",
             recipient,
             timestamp: new Date().toISOString(),
           });
         } else {
+          console.log(`Recipient ${recipient} is not online.`);
           safeSend(socket, {
             type: "error",
             message: "Recipient is not online",
@@ -81,14 +81,7 @@ wss.on("connection", (socket) => {
       });
     }
   });
-  socket.on("send_message", (message) => {
-    // Logique de traitement du message
-    console.log("Sending message:", message);
-    io.to(recipientSocketId).emit("message", message);
-    console.log('Emitted "message" event to recipient');
-    socket.emit("message_sent", { status: "success", messageId: message.id });
-    console.log('Emitted "message_sent" event to sender');
-  });
+
   socket.on("close", () => {
     if (userWalletAddress) {
       console.log(`User disconnected: ${userWalletAddress}`);

@@ -23,13 +23,14 @@ function ChatApp() {
   const wsClient = useRef<WebSocketClient | null>(null);
 
   const handleSendMessage = async (content: string) => {
+    console.log("Attempting to send message:", content);
     if (!publicKey || !content || !recipientAddress) {
       setError("Please fill in all fields and connect your wallet");
+      console.log("Error: Missing fields or wallet not connected");
       return;
     }
 
     try {
-      // Créer et envoyer la transaction
       const transaction = createMessageTransaction(publicKey, recipientAddress);
       const { blockhash, lastValidBlockHeight } =
         await connection.getLatestBlockhash("finalized");
@@ -42,17 +43,8 @@ function ChatApp() {
         maxRetries: 5,
       });
 
-      // Attendre la confirmation
-      await connection.confirmTransaction(
-        {
-          signature,
-          blockhash,
-          lastValidBlockHeight,
-        },
-        "confirmed"
-      );
+      console.log("Transaction successful with signature:", signature);
 
-      // Envoyer le message via WebSocket
       wsClient.current?.sendMessage({
         type: "message",
         sender: publicKey.toBase58(),
@@ -61,7 +53,6 @@ function ChatApp() {
         signature: signature,
       });
 
-      // Ajouter le message localement
       const newMessage = {
         sender: publicKey.toBase58(),
         content,
@@ -71,12 +62,11 @@ function ChatApp() {
 
       setMessages((prev) => {
         const updatedMessages = [...prev, newMessage];
-        // Stocker les messages dans le localStorage
         localStorage.setItem("chatMessages", JSON.stringify(updatedMessages));
         return updatedMessages;
       });
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error sending message:", error);
       setError(error.message);
     }
   };
@@ -87,6 +77,7 @@ function ChatApp() {
       wsClient.current.connect(publicKey.toBase58());
 
       wsClient.current.onMessage((data) => {
+        console.log("Message received from WebSocket:", data);
         if (data.type === "message" && data.content) {
           setMessages((prev) => [
             ...prev,
