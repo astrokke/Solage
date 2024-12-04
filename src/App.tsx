@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { Lock, MessageSquare } from "lucide-react";
-import { Chat } from "./components/Chat";
-import { RecipientInput } from "./components/RecipientInput";
 import { WalletContextProvider } from "./components/WalletContextProvider";
-import { PublicKey, Transaction, SystemProgram } from "@solana/web3.js";
-import { Buffer } from "./utils/buffer";
+import { WebSocketClient } from "./utils/websocket";
+import { createMessageTransaction } from "./utils/transaction";
+import { FEES_CONFIG } from "./config/fees";
+
 interface Message {
   sender: string;
   content: string;
@@ -14,47 +14,35 @@ interface Message {
   isSelf: boolean;
 }
 
-window.Buffer = Buffer;
 function ChatApp() {
   const { publicKey, sendTransaction } = useWallet();
   const { connection } = useConnection();
   const [messages, setMessages] = useState<Message[]>([]);
   const [recipientAddress, setRecipientAddress] = useState("");
   const [error, setError] = useState("");
-  const ws = useRef(null);
+  const wsClient = useRef<WebSocketClient | null>(null);
 
-  const handleSendMessage = async (content) => {
+  const handleSendMessage = async (content: string) => {
     if (!publicKey || !content || !recipientAddress) {
       setError("Please fill in all fields and connect your wallet");
       return;
     }
 
     try {
-      const recipient = new PublicKey(recipientAddress);
-
-      // Créer la transaction
-      const transaction = new Transaction().add(
-        SystemProgram.transfer({
-          fromPubkey: publicKey,
-          toPubkey: recipient,
-          lamports: 1000000, // 0.001 SOL
-        })
-      );
-
-      // Obtenir le dernier blockhash avec une durée de validité plus longue
+      // Créer et envoyer la transaction
+      const transaction = createMessageTransaction(publicKey, recipientAddress);
       const { blockhash, lastValidBlockHeight } =
         await connection.getLatestBlockhash("finalized");
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
-      // Envoyer la transaction
       const signature = await sendTransaction(transaction, connection, {
         skipPreflight: false,
         preflightCommitment: "confirmed",
         maxRetries: 5,
       });
 
-      // Attendre la confirmation avec un timeout plus long
+      // Attendre la confirmation
       await connection.confirmTransaction(
         {
           signature,
@@ -65,28 +53,24 @@ function ChatApp() {
       );
 
       // Envoyer le message via WebSocket
-      if (ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send(
-          JSON.stringify({
-            type: "message",
-            sender: publicKey.toBase58(),
-            recipient: recipientAddress,
-            content: content,
-            signature: signature,
-          })
-        );
+      wsClient.current?.sendMessage({
+        type: "message",
+        sender: publicKey.toBase58(),
+        recipient: recipientAddress,
+        content: content,
+        signature: signature,
+      });
 
-        // Ajouter le message localement
-        setMessages((prev) => [
-          ...prev,
-          {
-            sender: publicKey.toBase58(),
-            content,
-            timestamp: new Date(),
-            isSelf: true,
-          },
-        ]);
-      }
+      // Ajouter le message localement
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: publicKey.toBase58(),
+          content,
+          timestamp: new Date(),
+          isSelf: true,
+        },
+      ]);
     } catch (error) {
       console.error("Error:", error);
       setError(error.message);
@@ -95,53 +79,32 @@ function ChatApp() {
 
   useEffect(() => {
     if (publicKey) {
-      // Créer la connexion WebSocket
-      ws.current = new WebSocket("wss://solage-zzum.onrender.com");
+      wsClient.current = new WebSocketClient("wss://solage-zzum.onrender.com");
+      wsClient.current.connect(publicKey.toBase58());
 
-      ws.current.onopen = () => {
-        console.log("WebSocket connected");
-        // Authentifier avec le wallet
-        ws.current.send(
-          JSON.stringify({
-            type: "authenticate",
-            walletAddress: publicKey.toBase58(),
-          })
-        );
-      };
-
-      ws.current.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log("Received message:", data);
-
-          if (data.type === "message" && data.content) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                sender: data.sender,
-                content: data.content,
-                timestamp: new Date(data.timestamp || Date.now()),
-                isSelf: data.sender === publicKey.toBase58(),
-              },
-            ]);
-          }
-        } catch (error) {
-          console.error("WebSocket message error:", error);
+      wsClient.current.onMessage((data) => {
+        if (data.type === "message" && data.content) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              sender: data.sender,
+              content: data.content,
+              timestamp: new Date(data.timestamp || Date.now()),
+              isSelf: data.sender === publicKey.toBase58(),
+            },
+          ]);
         }
-      };
-
-      ws.current.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        setError("Connection error");
-      };
+      });
 
       return () => {
-        if (ws.current) {
-          ws.current.close();
-        }
+        wsClient.current?.disconnect();
       };
     }
   }, [publicKey]);
+
+  const formatSOL = (lamports: number) => {
+    return (lamports / 1000000000).toFixed(3);
+  };
 
   return (
     <div className="min-h-screen bg-[#1C1C1C]">
@@ -153,7 +116,12 @@ function ChatApp() {
                 <Lock className="text-[#14F195] w-5 h-5" />
                 <h1 className="text-lg font-medium text-white">Solana Chat</h1>
               </div>
-              <WalletMultiButton className="!bg-[#9945FF] hover:!bg-[#7C37CC] !transition-colors !rounded-xl" />
+              <div className="flex items-center gap-4">
+                <div className="text-sm text-gray-400">
+                  Fee: {formatSOL(FEES_CONFIG.MESSAGE_FEE)} SOL per message
+                </div>
+                <WalletMultiButton className="!bg-[#9945FF] hover:!bg-[#7C37CC] !transition-colors !rounded-xl" />
+              </div>
             </div>
           </div>
 
