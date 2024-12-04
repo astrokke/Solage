@@ -6,7 +6,7 @@ import { Chat } from "./components/Chat";
 import { RecipientInput } from "./components/RecipientInput";
 import { WalletContextProvider } from "./components/WalletContextProvider";
 import { PublicKey, Transaction, SystemProgram } from "@solana/web3.js";
-
+import { Buffer } from "./utils/buffer";
 interface Message {
   sender: string;
   content: string;
@@ -14,6 +14,7 @@ interface Message {
   isSelf: boolean;
 }
 
+window.Buffer = Buffer;
 function ChatApp() {
   const { publicKey, sendTransaction } = useWallet();
   const { connection } = useConnection();
