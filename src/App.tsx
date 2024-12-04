@@ -62,15 +62,19 @@ function ChatApp() {
       });
 
       // Ajouter le message localement
-      setMessages((prev) => [
-        ...prev,
-        {
-          sender: publicKey.toBase58(),
-          content,
-          timestamp: new Date(),
-          isSelf: true,
-        },
-      ]);
+      const newMessage = {
+        sender: publicKey.toBase58(),
+        content,
+        timestamp: new Date(),
+        isSelf: true,
+      };
+
+      setMessages((prev) => {
+        const updatedMessages = [...prev, newMessage];
+        // Stocker les messages dans le localStorage
+        localStorage.setItem("chatMessages", JSON.stringify(updatedMessages));
+        return updatedMessages;
+      });
     } catch (error) {
       console.error("Error:", error);
       setError(error.message);
@@ -101,6 +105,23 @@ function ChatApp() {
       };
     }
   }, [publicKey]);
+
+  useEffect(() => {
+    // Récupérer les messages du localStorage
+    const storedMessages = localStorage.getItem("chatMessages");
+    if (storedMessages) {
+      setMessages(JSON.parse(storedMessages));
+    }
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      localStorage.removeItem("chatMessages");
+      setMessages([]); // Optionnel : vider l'état des messages
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearTimeout(timeoutId);
+  }, []);
 
   const formatSOL = (lamports: number) => {
     return (lamports / 1000000000).toFixed(3);
