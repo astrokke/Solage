@@ -18,8 +18,9 @@ interface Props {
 }
 
 export const WalletContextProvider: FC<Props> = ({ children }) => {
-  const network = WalletAdapterNetwork.Devnet;
-  const endpoint = useMemo(() => clusterApiUrl(network), [network]);
+  // Utiliser mainnet au lieu de devnet
+  const network = WalletAdapterNetwork.Mainnet;
+  const endpoint = useMemo(() => "https://api.mainnet-beta.solana.com", []);
 
   const wallets = useMemo(
     () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],
