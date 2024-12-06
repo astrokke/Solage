@@ -18,11 +18,10 @@ export const createMessageTransaction = async (
   // Get recent blockhash
   const { blockhash, lastValidBlockHeight } =
     await connection.getLatestBlockhash("finalized");
-
   // Create transaction
   const transaction = new Transaction({
+    blockhash,
     feePayer: senderPublicKey,
-    recentBlockhash: blockhash,
     lastValidBlockHeight,
   });
 

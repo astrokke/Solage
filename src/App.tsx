@@ -3,7 +3,7 @@ import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { Lock } from "lucide-react";
 import { WalletContextProvider } from "./components/WalletContextProvider";
-import { ContactsList } from "./components/ContactsList";
+import { ContactsList } from "./components/ContactList";
 import { MessageView } from "./components/MessageView";
 import { WebSocketClient } from "./utils/websocket";
 import { Message, Contact } from "./types/message";
