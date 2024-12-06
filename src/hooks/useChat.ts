@@ -52,29 +52,18 @@ export const useChat = (
 
     ws.current.onmessage = (event) => {
       try {
-        const data: WebSocketMessage = JSON.parse(event.data);
-        console.log("Received message:", data);
+        const data = JSON.parse(event.data);
+        console.log("Message received from WebSocket:", data);
 
-        if (data.type === "authentication_success") {
-          console.log("Authentication successful");
-        } else if (data.type === "message" && data.sender && data.content) {
-          const newMessage: Message = {
+        if (data.type === "message") {
+          const newMessage = {
             sender: data.sender,
-            recipient: data.recipient || "",
+            recipient: data.recipient,
             content: data.content,
-            timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
+            timestamp: new Date(data.timestamp),
           };
 
-          // Only add messages that are part of this conversation
-          if (
-            recipientAddress &&
-            (data.sender === recipientAddress ||
-              data.recipient === recipientAddress)
-          ) {
-            setMessages((prev) => [...prev, newMessage]);
-          }
-        } else if (data.type === "error") {
-          setError(data.message || "An error occurred");
+          setMessages((prevMessages) => [...prevMessages, newMessage]);
         }
       } catch (error) {
         console.error("Error processing message:", error);

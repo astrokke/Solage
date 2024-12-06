@@ -32,8 +32,7 @@ function ChatApp() {
 
     try {
       const transaction = createMessageTransaction(publicKey, recipientAddress);
-      const { blockhash, lastValidBlockHeight } =
-        await connection.getLatestBlockhash("finalized");
+      const { blockhash } = await connection.getLatestBlockhash("finalized");
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = publicKey;
 
@@ -109,7 +108,7 @@ function ChatApp() {
     const timeoutId = setTimeout(() => {
       localStorage.removeItem("chatMessages");
       setMessages([]); // Optionnel : vider l'état des messages
-    }, 5 * 60 * 1000); // 5 minutes
+    }, 3600 * 60 * 1000); // 1 heure
 
     return () => clearTimeout(timeoutId);
   }, []);
@@ -128,6 +127,7 @@ function ChatApp() {
                 <Lock className="text-[#14F195] w-5 h-5" />
                 <h1 className="text-lg font-medium text-white">Solana Chat</h1>
               </div>
+
               <div className="flex items-center gap-4">
                 <div className="text-sm text-gray-400">
                   Fee: {formatSOL(FEES_CONFIG.MESSAGE_FEE)} SOL per message
