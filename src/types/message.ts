@@ -16,3 +16,20 @@ export interface Conversation {
   expiresAt: number;
   status: "pending" | "active" | "rejected";
 }
+
+export interface PendingMessage {
+  id: string;
+  sender: string;
+  recipient: string;
+  content: string;
+  timestamp: number;
+  readAt: number | null;
+  expiresAt: number | null;
+}
+
+export interface MessagePreview {
+  id: string;
+  sender: string;
+  timestamp: number;
+  isRead: boolean;
+}

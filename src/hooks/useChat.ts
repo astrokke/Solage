@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
+import { PendingMessage, Conversation } from "../types/conversation";
 
 interface Message {
   sender: string;
@@ -17,14 +18,39 @@ interface WebSocketMessage {
   message?: string;
 }
 
-export const useChat = (
-  publicKey: PublicKey | null,
-  recipientAddress?: string
-) => {
+export const useChat = (publicKey: PublicKey | null) => {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([]);
+  const [currentConversation, setCurrentConversation] = useState<string | null>(
+    null
+  );
   const [messages, setMessages] = useState<Message[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ws = useRef<WebSocket | null>(null);
+
+  const markMessageAsRead = useCallback((messageId: string) => {
+    const now = Date.now();
+    setPendingMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId
+          ? { ...msg, isRead: true, expiresAt: now + 24 * 60 * 60 * 1000 }
+          : msg
+      )
+    );
+  }, []);
+
+  // Nettoyer les messages expirés
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setPendingMessages((prev) =>
+        prev.filter((msg) => !msg.expiresAt || msg.expiresAt > now)
+      );
+    }, 60000); // Vérifier toutes les minutes
+
+    return () => clearInterval(interval);
+  }, []);
 
   const connect = useCallback(() => {
     if (!publicKey) return;
@@ -83,7 +109,7 @@ export const useChat = (
       setIsConnected(false);
       setError("Connection error");
     };
-  }, [publicKey, recipientAddress]);
+  }, [publicKey]);
 
   const sendMessage = useCallback(
     (recipientAddress: string, content: string) => {
@@ -131,7 +157,12 @@ export const useChat = (
   }, [connect]);
 
   return {
+    conversations,
+    pendingMessages,
+    currentConversation,
     messages,
+    setCurrentConversation,
+    markMessageAsRead,
     sendMessage,
     isConnected,
     error,
