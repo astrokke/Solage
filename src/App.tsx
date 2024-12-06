@@ -11,6 +11,8 @@ import { Message, Contact } from "./types/message";
 import { FEES_CONFIG } from "./config/fees";
 import { createMessageTransaction } from "./utils/transaction";
 
+window.Buffer = Buffer;
+
 function ChatApp() {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
