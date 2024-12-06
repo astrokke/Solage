@@ -25,7 +25,7 @@ function ChatApp() {
     sendMessage,
     isConnected,
   } = useChat(publicKey);
-    if (!publicKey || !content || !recipientAddress) {
+
   return (
     <div className="min-h-screen bg-[#1C1C1C]">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -38,7 +38,6 @@ function ChatApp() {
                   onTabChange={setActiveTab}
                   pendingCount={pendingMessages.length}
                 />
-        skipPreflight: false,
                 {activeTab === "pending" ? (
                   <div className="flex-1 overflow-y-auto p-4">
                     {pendingMessages.map((msg) => (
@@ -63,8 +62,7 @@ function ChatApp() {
                 ) : (
                   <Chat recipientAddress={currentMessage?.sender || ""} />
                 )}
-                    </div>
-      });
+              </div>
               <div className="flex-1">
                 {currentMessage ? (
                   <div className="h-full flex flex-col">
