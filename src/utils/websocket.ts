@@ -1,33 +1,45 @@
-import { MessageEncryption } from "./encryption";
-
 export class WebSocketClient {
   private ws: WebSocket | null = null;
-  private messageHandler: ((data: any) => void) | null = null;
-  private keyPair: nacl.BoxKeyPair;
+  private messageHandlers: ((data: any) => void)[] = [];
 
-  constructor(private url: string) {
-    this.keyPair = MessageEncryption.generateKeyPair();
-  }
+  constructor(private url: string) {}
 
-  connect(userId: string) {
-    this.ws = new WebSocket(`${this.url}?userId=${userId}`);
+  connect(walletAddress: string) {
+    this.ws = new WebSocket(this.url);
+
+    this.ws.onopen = () => {
+      this.ws?.send(
+        JSON.stringify({
+          type: "authenticate",
+          walletAddress: walletAddress,
+        })
+      );
+    };
 
     this.ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (this.messageHandler) {
-        this.messageHandler(data);
+      try {
+        const data = JSON.parse(event.data);
+        this.messageHandlers.forEach((handler) => handler(data));
+      } catch (error) {
+        console.error("WebSocket message error:", error);
       }
+    };
+
+    this.ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
     };
   }
 
-  onMessage(handler: (data: any) => void) {
-    this.messageHandler = handler;
+  sendMessage(message: any) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+      return true;
+    }
+    return false;
   }
 
-  sendMessage(message: any) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(message));
-    }
+  onMessage(handler: (data: any) => void) {
+    this.messageHandlers.push(handler);
   }
 
   disconnect() {
@@ -35,12 +47,5 @@ export class WebSocketClient {
       this.ws.close();
       this.ws = null;
     }
-  }
-
-  private async signMessage(message: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const encodedMessage = encoder.encode(message);
-    const signature = await window.solana.signMessage(encodedMessage, "utf8");
-    return signature;
   }
 }
