@@ -10,6 +10,7 @@ import { WebSocketClient } from "./utils/websocket";
 import { Message, Contact } from "./types/message";
 import { FEES_CONFIG } from "./config/fees";
 import { createMessageTransaction } from "./utils/transaction";
+import { Buffer } from "./utils/buffer";
 
 window.Buffer = Buffer;
 
