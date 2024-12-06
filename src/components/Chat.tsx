@@ -18,7 +18,7 @@ export const Chat: FC<ChatProps> = ({ recipientAddress }) => {
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const {
-    messages: wsMessages,
+    pendingMessages: wsMessages,
     sendMessage,
     isConnected,
     error: wsError,

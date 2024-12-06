@@ -5,6 +5,8 @@ import { useChat } from "./hooks/useChat";
 import { formatDistanceToNow } from "date-fns";
 import { MessageInput } from "./components/MessageInput";
 import { TabNavigation } from "./components/TabNavigation";
+import { useState } from "react";
+import { Chat } from "./components/Chat";
 window.Buffer = Buffer;
 
 const shortenAddress = (address: string) => {
