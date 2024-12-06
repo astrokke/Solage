@@ -7,7 +7,7 @@ import {
 import { WalletContextState } from "@solana/wallet-adapter-react";
 import { FEES_CONFIG } from "../config/fees";
 
-const MESSAGE_FEE = 1000; // 0.01 SOL
+export const MESSAGE_FEE = FEES_CONFIG.MESSAGE_FEE;
 
 export const sendSolanaMessage = async (
   wallet: WalletContextState,

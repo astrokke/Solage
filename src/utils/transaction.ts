@@ -33,11 +33,11 @@ export const createMessageTransaction = async (
   });
 
   // Add platform fee instruction if enabled
-  if (FEES_CONFIG.FEES_ENABLED) {
+  if (FEES_CONFIG) {
     const platformFeeInstruction = SystemProgram.transfer({
       fromPubkey: senderPublicKey,
       toPubkey: new PublicKey(FEES_CONFIG.PLATFORM_FEE_RECIPIENT),
-      lamports: FEES_CONFIG.FEE_AMOUNT,
+      lamports: FEES_CONFIG.MESSAGE_FEE,
     });
     transaction.add(platformFeeInstruction);
   }
