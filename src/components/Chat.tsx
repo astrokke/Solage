@@ -1,10 +1,13 @@
-import { FC, useState } from "react";
+import { FC, useState, useEffect } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { MessageInput } from "./MessageInput";
 import { ChatMessage } from "./ChatMessage";
 import { useChat } from "../hooks/useChat";
 import { sendSolanaMessage } from "../utils/solana";
 import { Buffer } from "../utils/buffer";
+import { SecureStorage } from "../utils/storage";
+import { isValidSolanaAddress } from "../utils/validation";
+
 interface ChatProps {
   recipientAddress: string;
 }
@@ -14,41 +17,62 @@ export const Chat: FC<ChatProps> = ({ recipientAddress }) => {
   const { publicKey } = wallet;
   const { connection } = useConnection();
   const [error, setError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
   const {
-    messages,
+    messages: wsMessages,
     sendMessage,
     isConnected,
     error: wsError,
   } = useChat(publicKey, recipientAddress);
 
+  useEffect(() => {
+    if (publicKey) {
+      SecureStorage.loadMessages(publicKey.toBase58()).then(setMessages);
+    }
+  }, [publicKey]);
+
+  useEffect(() => {
+    if (publicKey && messages.length > 0) {
+      SecureStorage.saveMessages(messages, publicKey.toBase58());
+    }
+  }, [messages, publicKey]);
+
   const handleSendMessage = async (content: string) => {
     if (!publicKey || !content || !recipientAddress) {
-      setError("Missing required fields");
+      setError("Champs requis manquants");
       return;
     }
 
     try {
       setError(null);
-      window.Buffer = Buffer;
-      // First send the Solana transaction
+
+      // Vérifier la validité de l'adresse du destinataire
+      if (!isValidSolanaAddress(recipientAddress)) {
+        throw new Error("Adresse du destinataire invalide");
+      }
+
+      // Envoyer la transaction Solana
       const signature = await sendSolanaMessage(
         wallet,
         connection,
         recipientAddress
       );
 
-      console.log("Transaction successful:", signature);
+      // Attendre la confirmation de la transaction
+      const confirmation = await connection.confirmTransaction(signature);
+      if (confirmation.value.err) {
+        throw new Error("La transaction a échoué");
+      }
 
-      // Then send the message through WebSocket
-      const messageSent = sendMessage(recipientAddress, content);
-
+      // Envoyer le message chiffré via WebSocket
+      const messageSent = await sendMessage(recipientAddress, content);
       if (!messageSent) {
-        throw new Error("Failed to send message through WebSocket");
+        throw new Error("Échec de l'envoi du message");
       }
     } catch (error) {
-      console.error("Error in handleSendMessage:", error);
+      console.error("Erreur lors de l'envoi du message:", error);
       setError(
-        error instanceof Error ? error.message : "Failed to send message"
+        error instanceof Error ? error.message : "Échec de l'envoi du message"
       );
     }
   };
