@@ -3,8 +3,9 @@ import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { Lock } from "lucide-react";
 import { WalletContextProvider } from "./components/WalletContextProvider";
-import { ContactsList } from "./components/ContactList";
+import { ContactsList } from "./components/ContactsList";
 import { MessageView } from "./components/MessageView";
+import { NewChatInput } from "./components/NewChatInput";
 import { WebSocketClient } from "./utils/websocket";
 import { Message, Contact } from "./types/message";
 import { FEES_CONFIG } from "./config/fees";
@@ -112,6 +113,19 @@ function ChatApp() {
     }
   };
 
+  const handleStartNewChat = (address: string) => {
+    setSelectedContact(address);
+    if (!contacts.find((c) => c.address === address)) {
+      setContacts((prev) => [
+        ...prev,
+        {
+          address,
+          unreadCount: 0,
+        },
+      ]);
+    }
+  };
+
   const handleMarkAsRead = (messageId: string) => {
     setMessages((prev) =>
       prev.map((msg) =>
@@ -134,7 +148,7 @@ function ChatApp() {
       setMessages((prev) =>
         prev.filter((msg) => !msg.expiresAt || msg.expiresAt > now)
       );
-    }, 60000); // Check every minute
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
@@ -160,11 +174,14 @@ function ChatApp() {
 
           {publicKey ? (
             <div className="flex h-[600px]">
-              <ContactsList
-                contacts={contacts}
-                onSelectContact={setSelectedContact}
-                selectedAddress={selectedContact ?? undefined}
-              />
+              <div className="w-80 flex flex-col border-r border-[#383838]">
+                <NewChatInput onStartChat={handleStartNewChat} />
+                <ContactsList
+                  contacts={contacts}
+                  onSelectContact={setSelectedContact}
+                  selectedAddress={selectedContact ?? undefined}
+                />
+              </div>
               {selectedContact ? (
                 <MessageView
                   messages={messages.filter(

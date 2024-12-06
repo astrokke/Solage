@@ -9,7 +9,7 @@ interface MessageInputProps {
 
 export const MessageInput: FC<MessageInputProps> = ({
   onSendMessage,
-  disabled,
+  disabled = false,
   placeholder = "Type your message...",
 }) => {
   const [message, setMessage] = useState("");
@@ -23,24 +23,22 @@ export const MessageInput: FC<MessageInputProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="p-4 border-t border-[#383838]">
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder={disabled ? "Enter recipient address first" : placeholder}
-          disabled={disabled}
-          className="flex-1 bg-[#1C1C1C] text-white rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#9945FF] disabled:opacity-50"
-        />
-        <button
-          type="submit"
-          disabled={!message.trim() || disabled}
-          className="bg-[#9945FF] text-white p-2 rounded-xl disabled:opacity-50 hover:bg-[#7C37CC] transition-colors"
-        >
-          <Send className="w-5 h-5" />
-        </button>
-      </div>
+    <form onSubmit={handleSubmit} className="flex gap-2">
+      <input
+        type="text"
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="flex-1 bg-[#1C1C1C] text-white rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-[#9945FF] disabled:opacity-50"
+      />
+      <button
+        type="submit"
+        disabled={!message.trim() || disabled}
+        className="bg-[#9945FF] text-white p-2 rounded-xl disabled:opacity-50 hover:bg-[#7C37CC] transition-colors"
+      >
+        <Send className="w-5 h-5" />
+      </button>
     </form>
   );
 };
