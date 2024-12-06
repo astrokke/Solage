@@ -1,35 +1,21 @@
-// types/message.ts
 export interface Message {
   id: string;
   sender: string;
   recipient: string;
   content: string;
-  timestamp: number;
-  status: "sent" | "delivered" | "read";
+  timestamp: Date;
+  readAt?: Date;
+  expiresAt?: Date;
+  status: "pending" | "read" | "expired";
 }
 
-export interface Conversation {
-  id: string;
-  participants: string[];
+export interface Contact {
+  address: string;
+  lastMessage?: Message;
+  unreadCount: number;
+}
+
+export interface MessageStore {
   messages: Message[];
-  createdAt: number;
-  expiresAt: number;
-  status: "pending" | "active" | "rejected";
-}
-
-export interface PendingMessage {
-  id: string;
-  sender: string;
-  recipient: string;
-  content: string;
-  timestamp: number;
-  readAt: number | null;
-  expiresAt: number | null;
-}
-
-export interface MessagePreview {
-  id: string;
-  sender: string;
-  timestamp: number;
-  isRead: boolean;
+  contacts: Contact[];
 }

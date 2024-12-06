@@ -1,13 +1,14 @@
 import { WebSocketServer } from "ws";
 import { createServer } from "http";
+import crypto from "crypto";
 
-// Use consistent port variable name
 const port = process.env.PORT || 10000;
 const server = createServer();
 const wss = new WebSocketServer({ server });
 
-// Store connected clients with their wallet addresses
+// Store connected clients and their messages
 const clients = new Map();
+const pendingMessages = new Map();
 
 // Helper function to safely send messages
 const safeSend = (socket, message) => {
@@ -22,20 +23,39 @@ const safeSend = (socket, message) => {
   }
 };
 
+// Clean up expired messages
+setInterval(() => {
+  const now = Date.now();
+  for (const [address, messages] of pendingMessages.entries()) {
+    const validMessages = messages.filter(
+      (msg) => !msg.expiresAt || msg.expiresAt > now
+    );
+    if (validMessages.length !== messages.length) {
+      pendingMessages.set(address, validMessages);
+    }
+  }
+}, 60000);
+
 wss.on("connection", (socket) => {
   console.log("Client connected");
   let userWalletAddress = null;
 
   socket.on("message", (message) => {
-    console.log("Message received from client:", message);
     try {
       const data = JSON.parse(message);
-      console.log("Parsed message data:", data);
+      console.log("Message received:", {
+        type: data.type,
+        sender: data.sender,
+        recipient: data.recipient,
+      });
 
       if (data.type === "authenticate") {
         userWalletAddress = data.walletAddress;
         clients.set(userWalletAddress, socket);
-        console.log(`User authenticated: ${userWalletAddress}`);
+
+        // Send pending messages
+        const pending = pendingMessages.get(userWalletAddress) || [];
+        pending.forEach((msg) => safeSend(socket, msg));
 
         safeSend(socket, {
           type: "authentication_success",
@@ -46,32 +66,52 @@ wss.on("connection", (socket) => {
 
       if (data.type === "message") {
         const { recipient, sender, content } = data;
-        console.log(
-          `Sending message from ${sender} to ${recipient}: ${content}`
-        );
-        const recipientSocket = clients.get(recipient);
+        const messageId = crypto.randomUUID();
+        const timestamp = new Date().toISOString();
 
-        if (recipientSocket && recipientSocket.readyState === 1) {
-          safeSend(recipientSocket, {
-            type: "message",
-            sender,
-            recipient,
-            content,
-            timestamp: new Date().toISOString(),
-          });
-          safeSend(socket, {
-            type: "message_sent",
-            recipient,
-            timestamp: new Date().toISOString(),
-          });
-        } else {
-          console.log(`Recipient ${recipient} is not online.`);
-          safeSend(socket, {
-            type: "error",
-            message: "Recipient is not online",
-          });
+        const messageData = {
+          type: "message",
+          id: messageId,
+          sender,
+          recipient,
+          content,
+          timestamp,
+          status: "pending",
+        };
+
+        // Store message for offline recipients
+        if (!pendingMessages.has(recipient)) {
+          pendingMessages.set(recipient, []);
         }
-        return;
+        pendingMessages.get(recipient).push(messageData);
+
+        // Send to recipient if online
+        const recipientSocket = clients.get(recipient);
+        if (recipientSocket && recipientSocket.readyState === 1) {
+          safeSend(recipientSocket, messageData);
+        }
+
+        // Confirm to sender
+        safeSend(socket, {
+          type: "message_sent",
+          id: messageId,
+          recipient,
+          timestamp,
+        });
+      }
+
+      if (data.type === "mark_read") {
+        const { messageId, recipient } = data;
+        const messages = pendingMessages.get(recipient) || [];
+        const messageIndex = messages.findIndex((m) => m.id === messageId);
+
+        if (messageIndex !== -1) {
+          messages[messageIndex].status = "read";
+          messages[messageIndex].readAt = new Date().toISOString();
+          messages[messageIndex].expiresAt = new Date(
+            Date.now() + 24 * 60 * 60 * 1000
+          ).toISOString();
+        }
       }
     } catch (error) {
       console.error("Error processing message:", error);
@@ -88,23 +128,8 @@ wss.on("connection", (socket) => {
       clients.delete(userWalletAddress);
     }
   });
-
-  socket.on("error", (error) => {
-    console.error("WebSocket error:", error);
-  });
 });
 
-// Keep connections alive with periodic pings
-const PING_INTERVAL = 30000;
-setInterval(() => {
-  wss.clients.forEach((client) => {
-    if (client.readyState === 1) {
-      client.ping();
-    }
-  });
-}, PING_INTERVAL);
-
-// Start the server
 server.listen(port, () => {
   console.log(`WebSocket server running on port ${port}`);
 });

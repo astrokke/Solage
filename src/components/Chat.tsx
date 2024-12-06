@@ -4,6 +4,7 @@ import { MessageInput } from "./MessageInput";
 import { ChatMessage } from "./ChatMessage";
 import { useChat } from "../hooks/useChat";
 import { sendSolanaMessage } from "../utils/solana";
+import { Buffer } from "../utils/buffer";
 import { SecureStorage } from "../utils/storage";
 import { isValidSolanaAddress } from "../utils/validation";
 
@@ -18,11 +19,11 @@ export const Chat: FC<ChatProps> = ({ recipientAddress }) => {
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const {
-    pendingMessages: wsMessages,
+    messages: wsMessages,
     sendMessage,
     isConnected,
     error: wsError,
-  } = useChat(publicKey);
+  } = useChat(publicKey, recipientAddress);
 
   useEffect(() => {
     if (publicKey) {
@@ -45,6 +46,7 @@ export const Chat: FC<ChatProps> = ({ recipientAddress }) => {
     try {
       setError(null);
 
+      // Vérifier la validité de l'adresse du destinataire
       if (!isValidSolanaAddress(recipientAddress)) {
         throw new Error("Adresse du destinataire invalide");
       }
@@ -94,11 +96,13 @@ export const Chat: FC<ChatProps> = ({ recipientAddress }) => {
           ))
         )}
       </div>
+
       {(error || wsError) && (
         <div className="px-4 py-2 bg-red-500/10 border-l-4 border-red-500 text-red-700">
           <p>{error || wsError}</p>
         </div>
       )}
+
       <div className="p-4 border-t border-gray-700">
         <MessageInput
           onSendMessage={handleSendMessage}

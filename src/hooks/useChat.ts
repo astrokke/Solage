@@ -1,24 +1,30 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
-import { MessageEncryption } from "../utils/encryption";
 
 interface Message {
-  id: string;
   sender: string;
   recipient: string;
   content: string;
-  timestamp: number;
-  isRead: boolean;
-  expiresAt: number | null;
+  timestamp: Date;
 }
 
-export const useChat = (publicKey: PublicKey | null) => {
-  const [pendingMessages, setPendingMessages] = useState<Message[]>([]);
-  const [currentMessage, setCurrentMessage] = useState<Message | null>(null);
+interface WebSocketMessage {
+  type: string;
+  sender?: string;
+  recipient?: string;
+  content?: string;
+  timestamp?: string;
+  message?: string;
+}
+
+export const useChat = (
+  publicKey: PublicKey | null,
+  recipientAddress?: string
+) => {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ws = useRef<WebSocket | null>(null);
-  const keyPair = useRef(MessageEncryption.generateKeyPair());
 
   const connect = useCallback(() => {
     if (!publicKey) return;
@@ -28,31 +34,36 @@ export const useChat = (publicKey: PublicKey | null) => {
     ws.current.onopen = () => {
       console.log("WebSocket Connected");
       setIsConnected(true);
-      ws.current?.send(
-        JSON.stringify({
-          type: "authenticate",
-          walletAddress: publicKey.toBase58(),
-        })
-      );
+      setError(null);
+
+      if (ws.current && publicKey) {
+        ws.current.send(
+          JSON.stringify({
+            type: "authenticate",
+            walletAddress: publicKey.toBase58(),
+          })
+        );
+        console.log(
+          "Sent authentication message for wallet:",
+          publicKey.toBase58()
+        );
+      }
     };
 
     ws.current.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log("Message received:", data);
+        console.log("Message received from WebSocket:", data);
 
         if (data.type === "message") {
           const newMessage = {
-            id: crypto.randomUUID(),
             sender: data.sender,
             recipient: data.recipient,
             content: data.content,
-            timestamp: Date.now(),
-            isRead: false,
-            expiresAt: null,
+            timestamp: new Date(data.timestamp),
           };
 
-          setPendingMessages((prev) => [...prev, newMessage]);
+          setMessages((prevMessages) => [...prevMessages, newMessage]);
         }
       } catch (error) {
         console.error("Error processing message:", error);
@@ -61,16 +72,23 @@ export const useChat = (publicKey: PublicKey | null) => {
     };
 
     ws.current.onclose = () => {
+      console.log("WebSocket Disconnected");
       setIsConnected(false);
       setError("Connection lost. Reconnecting...");
       setTimeout(connect, 3000);
     };
-  }, [publicKey]);
+
+    ws.current.onerror = (error) => {
+      console.error("WebSocket Error:", error);
+      setIsConnected(false);
+      setError("Connection error");
+    };
+  }, [publicKey, recipientAddress]);
 
   const sendMessage = useCallback(
-    async (recipientAddress: string, content: string) => {
+    (recipientAddress: string, content: string) => {
       if (!ws.current || !publicKey || !isConnected) {
-        setError("Not connected");
+        setError("Cannot send message: Not connected");
         return false;
       }
 
@@ -79,11 +97,20 @@ export const useChat = (publicKey: PublicKey | null) => {
         sender: publicKey.toBase58(),
         recipient: recipientAddress,
         content: content,
-        timestamp: Date.now(),
+        timestamp: new Date().toISOString(),
       };
 
       try {
         ws.current.send(JSON.stringify(message));
+        setMessages((prev) => [
+          ...prev,
+          {
+            sender: message.sender,
+            recipient: message.recipient,
+            content: message.content,
+            timestamp: new Date(message.timestamp),
+          },
+        ]);
         return true;
       } catch (error) {
         console.error("Error sending message:", error);
@@ -94,47 +121,17 @@ export const useChat = (publicKey: PublicKey | null) => {
     [publicKey, isConnected]
   );
 
-  const openMessage = useCallback(
-    (messageId: string) => {
-      const message = pendingMessages.find((m) => m.id === messageId);
-      if (message && !message.isRead) {
-        const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 heures
-
-        setPendingMessages((prev) =>
-          prev.map((m) =>
-            m.id === messageId ? { ...m, isRead: true, expiresAt } : m
-          )
-        );
-        setCurrentMessage({ ...message, isRead: true, expiresAt });
-      }
-    },
-    [pendingMessages]
-  );
-
-  // Nettoyer les messages expirés
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = Date.now();
-      setPendingMessages((prev) =>
-        prev.filter((msg) => !msg.expiresAt || msg.expiresAt > now)
-      );
-      if (currentMessage?.expiresAt && currentMessage.expiresAt < now) {
-        setCurrentMessage(null);
-      }
-    }, 60000);
-
-    return () => clearInterval(interval);
-  }, [currentMessage]);
-
   useEffect(() => {
     connect();
-    return () => ws.current?.close();
+    return () => {
+      if (ws.current) {
+        ws.current.close();
+      }
+    };
   }, [connect]);
 
   return {
-    pendingMessages,
-    currentMessage,
-    openMessage,
+    messages,
     sendMessage,
     isConnected,
     error,
