@@ -1,5 +1,5 @@
 import { FC } from "react";
-import { NetworkConfig, NETWORKS } from "../config/network";
+import { NetworkConfig } from "../config/network";
 
 interface NetworkSelectorProps {
   currentNetwork: NetworkConfig;
