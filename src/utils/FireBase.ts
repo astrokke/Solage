@@ -59,17 +59,24 @@ export const subscribeToMessages = (
     const messages: Message[] = [];
     snapshot.forEach((childSnapshot) => {
       const data = childSnapshot.val();
-      const participants = data.participants.split(",");
+      if (data && data.participants) {
+        const participants = data.participants.split(",");
 
-      if (participants.includes(userAddress)) {
-        messages.push({
-          id: childSnapshot.key!,
-          sender: data.sender,
-          recipient: data.recipient,
-          content: data.content,
-          timestamp: new Date(data.timestamp),
-          status: data.status,
-        });
+        if (participants.includes(userAddress)) {
+          messages.push({
+            id: childSnapshot.key!,
+            sender: data.sender,
+            recipient: data.recipient,
+            content: data.content,
+            timestamp: new Date(data.timestamp),
+            status: data.status,
+          });
+        }
+      } else {
+        console.warn(
+          "Participants non définis pour le message:",
+          childSnapshot.key
+        );
       }
     });
 
