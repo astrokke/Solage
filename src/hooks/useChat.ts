@@ -1,113 +1,53 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { PublicKey } from "@solana/web3.js";
+import {
+  subscribeToMessages,
+  addMessage,
+  getConversations,
+} from "../utils/FireBase";
+import { Message } from "../types/message";
+import { Contact } from "../types/message";
 
-interface Message {
-  sender: string;
-  recipient: string;
-  content: string;
-  timestamp: Date;
-}
-
-interface WebSocketMessage {
-  type: string;
-  sender?: string;
-  recipient?: string;
-  content?: string;
-  timestamp?: string;
-  message?: string;
-}
-
-export const useChat = (
-  publicKey: PublicKey | null,
-  recipientAddress?: string
-) => {
+export const useChat = (publicKey: PublicKey | null) => {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const ws = useRef<WebSocket | null>(null);
 
-  const connect = useCallback(() => {
+  useEffect(() => {
     if (!publicKey) return;
 
-    ws.current = new WebSocket("wss://solage-zzum.onrender.com");
+    const userAddress = publicKey.toBase58();
 
-    ws.current.onopen = () => {
-      console.log("WebSocket Connected");
-      setIsConnected(true);
-      setError(null);
+    // Subscribe to messages
+    const unsubscribe = subscribeToMessages(userAddress, (newMessages) => {
+      setMessages(newMessages);
+    });
 
-      if (ws.current && publicKey) {
-        const authMessage = {
-          type: "authenticate",
-          walletAddress: publicKey.toBase58(),
-        };
-        console.log("Sending authentication message:", authMessage);
-        ws.current.send(JSON.stringify(authMessage));
-      }
+    // Load conversations
+    getConversations(userAddress).then(setContacts).catch(console.error);
+
+    return () => {
+      unsubscribe();
     };
-
-    ws.current.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log("Message received from WebSocket:", data);
-
-        if (data.type === "message") {
-          const newMessage = {
-            sender: data.sender,
-            recipient: data.recipient,
-            content: data.content,
-            timestamp: new Date(data.timestamp),
-          };
-
-          setMessages((prevMessages) => [...prevMessages, newMessage]);
-        }
-      } catch (error) {
-        console.error("Error processing message:", error);
-        setError("Error processing message");
-      }
-    };
-
-    ws.current.onclose = () => {
-      console.log("WebSocket Disconnected");
-      setIsConnected(false);
-      setError("Connection lost. Reconnecting...");
-      setTimeout(connect, 3000);
-    };
-
-    ws.current.onerror = (error) => {
-      console.error("WebSocket Error:", error);
-      setIsConnected(false);
-      setError("Connection error");
-    };
-  }, [publicKey, recipientAddress]);
+  }, [publicKey]);
 
   const sendMessage = useCallback(
-    (recipientAddress: string, content: string) => {
-      if (!ws.current || !publicKey || !isConnected) {
-        setError("Cannot send message: Not connected");
+    async (recipientAddress: string, content: string) => {
+      if (!publicKey) {
+        setError("Wallet not connected");
         return false;
       }
 
-      const message = {
-        type: "message",
-        sender: publicKey.toBase58(),
-        recipient: recipientAddress,
-        content: content,
-        timestamp: new Date().toISOString(),
-      };
-
       try {
-        console.log("Sending message:", message);
-        ws.current.send(JSON.stringify(message));
-        setMessages((prev) => [
-          ...prev,
-          {
-            sender: message.sender,
-            recipient: message.recipient,
-            content: message.content,
-            timestamp: new Date(message.timestamp),
-          },
-        ]);
+        const messageId = `${Date.now()}-${Math.random()
+          .toString(36)
+          .substr(2, 9)}`;
+        await addMessage(
+          messageId,
+          publicKey.toBase58(),
+          recipientAddress,
+          content
+        );
         return true;
       } catch (error) {
         console.error("Error sending message:", error);
@@ -115,22 +55,13 @@ export const useChat = (
         return false;
       }
     },
-    [publicKey, isConnected]
+    [publicKey]
   );
-
-  useEffect(() => {
-    connect();
-    return () => {
-      if (ws.current) {
-        ws.current.close();
-      }
-    };
-  }, [connect]);
 
   return {
     messages,
+    contacts,
     sendMessage,
-    isConnected,
     error,
   };
 };

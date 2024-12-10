@@ -19,6 +19,7 @@
     "@stablelib/base64": "^2.0.0",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
+    "firebase": "^11.0.2",
     "lucide-react": "^0.294.0",
     "pg": "^8.13.1",
     "react": "^18.3.1",

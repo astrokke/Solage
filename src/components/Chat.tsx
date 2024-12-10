@@ -4,7 +4,6 @@ import { MessageInput } from "./MessageInput";
 import { ChatMessage } from "./ChatMessage";
 import { useChat } from "../hooks/useChat";
 import { sendSolanaMessage } from "../utils/solana";
-import { Buffer } from "../utils/buffer";
 import { SecureStorage } from "../utils/storage";
 import { isValidSolanaAddress } from "../utils/validation";
 

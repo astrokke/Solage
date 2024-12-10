@@ -4,9 +4,9 @@ export interface Message {
   recipient: string;
   content: string;
   timestamp: Date;
+  status: "pending" | "read" | "expired";
   readAt?: Date;
   expiresAt?: Date;
-  status: "pending" | "read" | "expired";
 }
 
 export interface Contact {
