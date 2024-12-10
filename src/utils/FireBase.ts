@@ -12,6 +12,7 @@ import {
 } from "firebase/database";
 
 type Message = {
+  id: string;
   sender: string;
   recipient: string;
   content: string;
@@ -20,14 +21,22 @@ type Message = {
 };
 
 const firebaseConfig = {
-  apiKey: "XXX",
-  authDomain: "XXX",
-  databaseURL: "XXX",
-  projectId: "XXX",
-  storageBucket: "XXX",
-  messagingSenderId: "XXX",
-  appId: "XXX",
-  measurementId: "XXX",
+  apiKey: "AIzaSyA2yE4q6C49Fu6cDwsOB0_ijOVfVHNgnT8",
+
+  authDomain: "solage-7829c.firebaseapp.com",
+
+  databaseURL:
+    "https://solage-7829c-default-rtdb.europe-west1.firebasedatabase.app",
+
+  projectId: "solage-7829c",
+
+  storageBucket: "solage-7829c.firebasestorage.app",
+
+  messagingSenderId: "228678821089",
+
+  appId: "1:228678821089:web:e7effecb832be33a7143a0",
+
+  measurementId: "G-3PTTNYLQ9C",
 };
 
 // Initialize Firebase
@@ -35,6 +44,7 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 export const addMessage = async (
+  id: string,
   sender: string,
   recipient: string,
   content: string
@@ -46,6 +56,7 @@ export const addMessage = async (
     const messagesRef = ref(db, "messages");
     const newMessageRef = push(messagesRef);
     const messageData = {
+      id,
       sender,
       recipient,
       content,

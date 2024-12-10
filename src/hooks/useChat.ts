@@ -42,12 +42,14 @@ export const useChat = (publicKey: PublicKey | null) => {
         const messageId = `${Date.now()}-${Math.random()
           .toString(36)
           .substr(2, 9)}`;
-        await addMessage(
-          messageId,
-          publicKey.toBase58(),
-          recipientAddress,
-          content
-        );
+        await addMessage(messageId, {
+          id: messageId,
+          sender: publicKey.toBase58(),
+          recipient: recipientAddress,
+          content,
+          timestamp: Date.now(),
+        });
+
         return true;
       } catch (error) {
         console.error("Error sending message:", error);
