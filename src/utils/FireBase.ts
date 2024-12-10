@@ -3,25 +3,31 @@ import {
   getDatabase,
   ref,
   push,
+  set,
   onValue,
   update,
   query,
   orderByChild,
   equalTo,
-  set,
 } from "firebase/database";
-import { Message } from "../types/message";
+
+type Message = {
+  sender: string;
+  recipient: string;
+  content: string;
+  timestamp: number;
+  status: string;
+};
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA2yE4q6C49Fu6cDwsOB0_ijOVfVHNgnT8",
-  authDomain: "solage-7829c.firebaseapp.com",
-  databaseURL:
-    "https://solage-7829c-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "solage-7829c",
-  storageBucket: "solage-7829c.firebasestorage.app",
-  messagingSenderId: "228678821089",
-  appId: "1:228678821089:web:e7effecb832be33a7143a0",
-  measurementId: "G-3PTTNYLQ9C",
+  apiKey: "XXX",
+  authDomain: "XXX",
+  databaseURL: "XXX",
+  projectId: "XXX",
+  storageBucket: "XXX",
+  messagingSenderId: "XXX",
+  appId: "XXX",
+  measurementId: "XXX",
 };
 
 // Initialize Firebase
@@ -38,8 +44,7 @@ export const addMessage = async (
   }
   try {
     const messagesRef = ref(db, "messages");
-    const newMessageRef = push(messagesRef); // Crée une nouvelle entrée unique
-
+    const newMessageRef = push(messagesRef);
     const messageData = {
       sender,
       recipient,
@@ -58,7 +63,7 @@ export const addMessage = async (
 
 export const subscribeToMessages = (
   userAddress: string,
-  callback: (messages: any[]) => void
+  callback: (messages: Message[]) => void
 ): void => {
   const messagesRef = ref(db, "messages");
   const userMessagesQuery = query(
@@ -117,7 +122,7 @@ export const getConversations = (
         const data = childSnapshot.val();
         if (!data) {
           console.error("Données introuvables :", childSnapshot.key);
-          return; // Ignore les entrées invalides
+          return;
         }
 
         const otherParticipant =
@@ -125,7 +130,7 @@ export const getConversations = (
 
         if (!otherParticipant) {
           console.error("Participant introuvable pour :", data);
-          return; // Ignore cette conversation
+          return;
         }
 
         if (!conversationsMap.has(otherParticipant)) {
