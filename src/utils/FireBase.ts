@@ -16,11 +16,20 @@ import { Message } from "../types/message";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA2yE4q6C49Fu6cDwsOB0_ijOVfVHNgnT8",
+
   authDomain: "solage-7829c.firebaseapp.com",
+
+  databaseURL:
+    "https://solage-7829c-default-rtdb.europe-west1.firebasedatabase.app",
+
   projectId: "solage-7829c",
+
   storageBucket: "solage-7829c.firebasestorage.app",
+
   messagingSenderId: "228678821089",
+
   appId: "1:228678821089:web:e7effecb832be33a7143a0",
+
   measurementId: "G-3PTTNYLQ9C",
 };
 
