@@ -8,6 +8,7 @@ import {
   query,
   orderByChild,
   equalTo,
+  set,
 } from "firebase/database";
 import { Message } from "../types/message";
 
@@ -66,26 +67,29 @@ export const subscribeToMessages = (
     equalTo(userAddress)
   );
 
-onValue(
-  userMessagesQuery,
-  (snapshot) => {
-    const messages: Message[] = [];
-    snapshot.forEach((childSnapshot) => {
-      const data = childSnapshot.val();
-      if (data) { // Vérifie que les données existent
-        messages.push({ id: childSnapshot.key, ...data });
-      } else {
-        console.error("Données introuvables pour le snapshot :", childSnapshot);
-      }
-    });
+  onValue(
+    userMessagesQuery,
+    (snapshot) => {
+      const messages: Message[] = [];
+      snapshot.forEach((childSnapshot) => {
+        const data = childSnapshot.val();
+        if (data) {
+          messages.push({ id: childSnapshot.key, ...data });
+        } else {
+          console.error(
+            "Données introuvables pour le snapshot :",
+            childSnapshot
+          );
+        }
+      });
 
-    callback(messages);
-  },
-  (error) => {
-    console.error("Erreur lors de la récupération des messages :", error);
-  }
-);
-
+      callback(messages);
+    },
+    (error) => {
+      console.error("Erreur lors de la récupération des messages :", error);
+    }
+  );
+};
 
 export const markMessageAsRead = async (messageId: string): Promise<void> => {
   try {
@@ -109,45 +113,49 @@ export const getConversations = (
     (snapshot) => {
       const conversationsMap = new Map<string, any>();
 
-     snapshot.forEach((childSnapshot) => {
-  const data = childSnapshot.val();
-  if (!data) {
-    console.error("Données introuvables :", childSnapshot.key);
-    return; // Ignore les entrées invalides
-  }
+      snapshot.forEach((childSnapshot) => {
+        const data = childSnapshot.val();
+        if (!data) {
+          console.error("Données introuvables :", childSnapshot.key);
+          return; // Ignore les entrées invalides
+        }
 
-  const otherParticipant =
-    data.sender === userAddress ? data.recipient : data.sender;
+        const otherParticipant =
+          data.sender === userAddress ? data.recipient : data.sender;
 
-  if (!otherParticipant) {
-    console.error("Participant introuvable pour :", data);
-    return; // Ignore cette conversation
-  }
+        if (!otherParticipant) {
+          console.error("Participant introuvable pour :", data);
+          return; // Ignore cette conversation
+        }
 
-  if (!conversationsMap.has(otherParticipant)) {
-    conversationsMap.set(otherParticipant, {
-      address: otherParticipant,
-      lastMessage: {
-        content: data.content,
-        timestamp: data.timestamp,
-      },
-      unreadCount:
-        data.status === "pending" && data.recipient === userAddress ? 1 : 0,
-    });
-  } else {
-    // Mise à jour des données existantes
-    const conversation = conversationsMap.get(otherParticipant);
-    if (conversation) {
-      conversation.lastMessage = {
-        content: data.content,
-        timestamp: data.timestamp,
-      };
-      if (data.status === "pending" && data.recipient === userAddress) {
-        conversation.unreadCount++;
-      }
-    }
-  }
+        if (!conversationsMap.has(otherParticipant)) {
+          conversationsMap.set(otherParticipant, {
+            address: otherParticipant,
+            lastMessage: {
+              content: data.content,
+              timestamp: data.timestamp,
+            },
+            unreadCount:
+              data.status === "pending" && data.recipient === userAddress
+                ? 1
+                : 0,
+          });
+        } else {
+          const conversation = conversationsMap.get(otherParticipant);
+          if (conversation) {
+            conversation.lastMessage = {
+              content: data.content,
+              timestamp: data.timestamp,
+            };
+            if (data.status === "pending" && data.recipient === userAddress) {
+              conversation.unreadCount++;
+            }
+          }
+        }
+      });
 
+      callback(Array.from(conversationsMap.values()));
+    },
     (error) => {
       console.error(
         "Erreur lors de la récupération des conversations :",
