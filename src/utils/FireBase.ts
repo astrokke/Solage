@@ -34,101 +34,110 @@ export const addMessage = async (
 ): Promise<void> => {
   try {
     const messagesRef = ref(db, "messages");
-    const newMessage = {
+    const newMessageRef = push(messagesRef); // Crée une nouvelle entrée unique
+
+    const messageData = {
       sender,
       recipient,
       content,
       timestamp: Date.now(),
       status: "pending",
-      participants: [sender, recipient].sort().join(","),
     };
 
-    await push(messagesRef, newMessage);
+    await set(newMessageRef, messageData);
+    console.info("Message ajouté avec succès !");
   } catch (error) {
-    console.error("Error adding message:", error);
+    console.error("Erreur lors de l'ajout du message :", error);
     throw error;
   }
 };
 
 export const subscribeToMessages = (
   userAddress: string,
-  callback: (messages: Message[]) => void
-) => {
+  callback: (messages: any[]) => void
+): void => {
   const messagesRef = ref(db, "messages");
-  const messagesQuery = query(messagesRef);
+  const userMessagesQuery = query(
+    messagesRef,
+    orderByChild("recipient"),
+    equalTo(userAddress)
+  );
 
-  const unsubscribe = onValue(messagesQuery, (snapshot) => {
-    const messages: Message[] = [];
-    snapshot.forEach((childSnapshot) => {
-      const data = childSnapshot.val();
-      const participants = data.participants.split(",");
+  onValue(
+    userMessagesQuery,
+    (snapshot) => {
+      const messages: any[] = [];
+      snapshot.forEach((childSnapshot) => {
+        messages.push({ id: childSnapshot.key, ...childSnapshot.val() });
+      });
 
-      if (participants.includes(userAddress)) {
-        messages.push({
-          id: childSnapshot.key!,
-          sender: data.sender,
-          recipient: data.recipient,
-          content: data.content,
-          timestamp: new Date(data.timestamp),
-          status: data.status,
-        });
-      }
-    });
-
-    // Sort messages by timestamp in descending order
-    messages.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
-    callback(messages);
-  });
-
-  return () => {
-    unsubscribe();
-  };
+      callback(messages);
+    },
+    (error) => {
+      console.error("Erreur lors de la récupération des messages :", error);
+    }
+  );
 };
 
-export const markMessageAsRead = async (messageId: string) => {
+export const markMessageAsRead = async (messageId: string): Promise<void> => {
   try {
     const messageRef = ref(db, `messages/${messageId}`);
-    await update(messageRef, {
-      status: "read",
-      readAt: Date.now(),
-    });
+    await update(messageRef, { status: "read", readAt: Date.now() });
+    console.info(`Message ${messageId} marqué comme lu.`);
   } catch (error) {
-    console.error("Error marking message as read:", error);
+    console.error("Erreur lors de la mise à jour du message :", error);
     throw error;
   }
 };
 
-export const getConversations = async (userAddress: string) => {
-  return new Promise((resolve) => {
-    const messagesRef = ref(db, "messages");
-    const unsubscribe = onValue(messagesRef, (snapshot) => {
-      const conversations = new Map();
+export const getConversations = (
+  userAddress: string,
+  callback: (conversations: any[]) => void
+): void => {
+  const messagesRef = ref(db, "messages");
+
+  onValue(
+    messagesRef,
+    (snapshot) => {
+      const conversationsMap = new Map<string, any>();
 
       snapshot.forEach((childSnapshot) => {
         const data = childSnapshot.val();
-        const participants = data.participants.split(",");
+        const otherParticipant =
+          data.sender === userAddress ? data.recipient : data.sender;
 
-        if (participants.includes(userAddress)) {
-          const otherParticipant = participants.find((p) => p !== userAddress)!;
-
-          if (!conversations.has(otherParticipant)) {
-            conversations.set(otherParticipant, {
-              address: otherParticipant,
-              lastMessage: {
-                content: data.content,
-                timestamp: new Date(data.timestamp),
-              },
-              unreadCount:
-                data.status === "pending" && data.recipient === userAddress
-                  ? 1
-                  : 0,
-            });
+        if (!conversationsMap.has(otherParticipant)) {
+          conversationsMap.set(otherParticipant, {
+            address: otherParticipant,
+            lastMessage: {
+              content: data.content,
+              timestamp: data.timestamp,
+            },
+            unreadCount:
+              data.status === "pending" && data.recipient === userAddress
+                ? 1
+                : 0,
+          });
+        } else {
+          // Mise à jour des données existantes
+          const conversation = conversationsMap.get(otherParticipant);
+          conversation.lastMessage = {
+            content: data.content,
+            timestamp: data.timestamp,
+          };
+          if (data.status === "pending" && data.recipient === userAddress) {
+            conversation.unreadCount++;
           }
         }
       });
 
-      resolve(Array.from(conversations.values()));
-      unsubscribe();
-    });
-  });
+      callback(Array.from(conversationsMap.values()));
+    },
+    (error) => {
+      console.error(
+        "Erreur lors de la récupération des conversations :",
+        error
+      );
+    }
+  );
 };
