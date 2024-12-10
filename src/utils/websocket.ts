@@ -67,12 +67,12 @@ export class WebSocketClient {
 
   async sendMessage(message: any) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.keyPair) {
-      console.log("WebSocket is not open or keyPair is missing");
-      console.log(
+      console.error("WebSocket is not open or keyPair is missing");
+      console.error(
         "WebSocket state:",
         this.ws ? this.ws.readyState : "No WebSocket"
       );
-      console.log("KeyPair:", this.keyPair);
+      console.error("KeyPair:", this.keyPair);
       return false;
     }
 
