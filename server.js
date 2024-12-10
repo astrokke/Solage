@@ -27,7 +27,7 @@ wss.on("connection", (socket) => {
   let userWalletAddress = null;
 
   socket.on("message", (message) => {
-    console.log("Message received from client:", message);
+    console.log("Message received from client:", message.toString());
     try {
       const data = JSON.parse(message);
       console.log("Parsed message data:", data);

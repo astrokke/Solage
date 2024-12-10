@@ -37,16 +37,12 @@ export const useChat = (
       setError(null);
 
       if (ws.current && publicKey) {
-        ws.current.send(
-          JSON.stringify({
-            type: "authenticate",
-            walletAddress: publicKey.toBase58(),
-          })
-        );
-        console.log(
-          "Sent authentication message for wallet:",
-          publicKey.toBase58()
-        );
+        const authMessage = {
+          type: "authenticate",
+          walletAddress: publicKey.toBase58(),
+        };
+        console.log("Sending authentication message:", authMessage);
+        ws.current.send(JSON.stringify(authMessage));
       }
     };
 
@@ -101,6 +97,7 @@ export const useChat = (
       };
 
       try {
+        console.log("Sending message:", message);
         ws.current.send(JSON.stringify(message));
         setMessages((prev) => [
           ...prev,

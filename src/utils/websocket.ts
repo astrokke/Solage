@@ -20,6 +20,7 @@ export class WebSocketClient {
     this.ws = new WebSocket(this.url);
 
     this.ws.onopen = () => {
+      console.log("WebSocket connection opened");
       this.reconnectAttempts = 0;
       if (this.ws && this.keyPair) {
         const authMessage = {
@@ -27,6 +28,7 @@ export class WebSocketClient {
           walletAddress: walletAddress,
           publicKey: Buffer.from(this.keyPair.publicKey).toString("base64"),
         };
+        console.log("Sending authentication message:", authMessage);
         this.ws.send(JSON.stringify(authMessage));
       }
     };
@@ -34,6 +36,7 @@ export class WebSocketClient {
     this.ws.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log("Message received from server:", data);
 
         if (data.encrypted && this.keyPair) {
           data.content = await MessageEncryption.decrypt(
@@ -50,6 +53,7 @@ export class WebSocketClient {
     };
 
     this.ws.onclose = () => {
+      console.log("WebSocket connection closed");
       if (this.reconnectAttempts < MAX_RETRY_ATTEMPTS) {
         this.reconnectAttempts++;
         setTimeout(() => this.connect(walletAddress), RECONNECT_INTERVAL);
@@ -63,6 +67,7 @@ export class WebSocketClient {
 
   async sendMessage(message: any) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN || !this.keyPair) {
+      console.log("WebSocket is not open or keyPair is missing");
       return false;
     }
 
@@ -76,6 +81,7 @@ export class WebSocketClient {
         message.encrypted = true;
       }
 
+      console.log("Sending message:", message);
       this.ws.send(JSON.stringify(message));
       return true;
     } catch (error) {
