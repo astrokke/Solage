@@ -6,10 +6,10 @@ import { WalletContextProvider } from "./components/WalletContextProvider";
 import { ContactsList } from "./components/ContactList";
 import { MessageView } from "./components/MessageView";
 import { NewChatInput } from "./components/NewChatInput";
-import { WebSocketClient } from "./utils/websocket";
 import { Message, Contact } from "./types/message";
 import { FEES_CONFIG } from "./config/fees";
 import { createMessageTransaction } from "./utils/transaction";
+import { useFirebaseChat } from "./hooks/useFirebaseChat";
 import { Buffer } from "./utils/buffer";
 
 window.Buffer = Buffer;
@@ -18,71 +18,14 @@ function ChatApp() {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
   const [selectedContact, setSelectedContact] = useState<string | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [contacts, setContacts] = useState<Contact[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const wsClient = new WebSocketClient();
-
-  useEffect(() => {
-    if (publicKey) {
-      wsClient.connect(publicKey.toBase58());
-
-      wsClient.onMessage((data) => {
-        if (data.type === "message") {
-          const newMessage: Message = {
-            id: crypto.randomUUID(),
-            sender: data.sender,
-            recipient: data.recipient,
-            content: data.content,
-            timestamp: new Date(),
-            status: "pending",
-          };
-
-          setMessages((prev) => [...prev, newMessage]);
-          updateContacts(newMessage);
-        }
-      });
-
-      return () => wsClient.disconnect();
-    }
-  }, [publicKey]);
-
-  const updateContacts = (message: Message) => {
-    setContacts((prev) => {
-      const otherParty =
-        message.sender === publicKey?.toBase58()
-          ? message.recipient
-          : message.sender;
-
-      const existingContact = prev.find((c) => c.address === otherParty);
-      if (existingContact) {
-        return prev.map((c) =>
-          c.address === otherParty
-            ? {
-                ...c,
-                lastMessage: message,
-                unreadCount:
-                  c.unreadCount + (message.status === "pending" ? 1 : 0),
-              }
-            : c
-        );
-      }
-
-      return [
-        ...prev,
-        {
-          address: otherParty,
-          lastMessage: message,
-          unreadCount: message.status === "pending" ? 1 : 0,
-        },
-      ];
-    });
-  };
+  const { messages, conversations, sendMessage } = useFirebaseChat(publicKey);
 
   const handleSendMessage = async (content: string) => {
     if (!publicKey || !selectedContact) return;
 
     try {
+      // First create and send the Solana transaction
       const transaction = await createMessageTransaction(
         connection,
         publicKey,
@@ -92,24 +35,8 @@ function ChatApp() {
       const signature = await window.solana.signAndSendTransaction(transaction);
       console.log("Transaction sent:", signature);
 
-      const newMessage: Message = {
-        id: signature,
-        sender: publicKey.toBase58(),
-        recipient: selectedContact,
-        content,
-        timestamp: new Date(),
-        status: "pending",
-      };
-
-      wsClient.sendMessage({
-        type: "message",
-        sender: publicKey.toBase58(),
-        recipient: selectedContact,
-        content,
-      });
-
-      setMessages((prev) => [...prev, newMessage]);
-      updateContacts(newMessage);
+      // Then store the message in Firebase
+      await sendMessage(selectedContact, content);
     } catch (error) {
       console.error("Error sending message:", error);
       setError("Failed to send message");
@@ -118,43 +45,11 @@ function ChatApp() {
 
   const handleStartNewChat = (address: string) => {
     setSelectedContact(address);
-    if (!contacts.find((c) => c.address === address)) {
-      setContacts((prev) => [
-        ...prev,
-        {
-          address,
-          unreadCount: 0,
-        },
-      ]);
-    }
   };
 
   const handleMarkAsRead = (messageId: string) => {
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId
-          ? {
-              ...msg,
-              status: "read",
-              readAt: new Date(),
-              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-            }
-          : msg
-      )
-    );
+    // This will be handled by Firebase listeners
   };
-
-  // Clean up expired messages
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date();
-      setMessages((prev) =>
-        prev.filter((msg) => !msg.expiresAt || msg.expiresAt > now)
-      );
-    }, 60000);
-
-    return () => clearInterval(interval);
-  }, []);
 
   return (
     <div className="min-h-screen bg-[#1C1C1C]">
@@ -180,7 +75,7 @@ function ChatApp() {
               <div className="w-80 flex flex-col border-r border-[#383838]">
                 <NewChatInput onStartChat={handleStartNewChat} />
                 <ContactsList
-                  contacts={contacts}
+                  contacts={conversations}
                   onSelectContact={setSelectedContact}
                   selectedAddress={selectedContact ?? undefined}
                 />
@@ -211,6 +106,12 @@ function ChatApp() {
               <p className="mb-6">
                 Please connect your Solana wallet to start chatting
               </p>
+            </div>
+          )}
+
+          {error && (
+            <div className="p-3 bg-red-900/20 border-l-4 border-red-500 text-red-400 text-sm">
+              {error}
             </div>
           )}
         </div>

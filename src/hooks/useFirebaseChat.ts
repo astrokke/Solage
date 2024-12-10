@@ -4,6 +4,7 @@ import {
   subscribeToMessages,
   addMessage,
   getConversations,
+  markMessageAsRead,
 } from "../utils/FireBase";
 import { Message } from "../types/message";
 
@@ -16,22 +17,30 @@ export const useFirebaseChat = (publicKey: PublicKey | null) => {
     if (!publicKey) return;
 
     const address = publicKey.toBase58();
+    let unsubscribeMessages: (() => void) | undefined;
 
-    // Subscribe to messages
-    const unsubscribeMessages = subscribeToMessages(address, (newMessages) => {
-      setMessages(newMessages);
-    });
+    const setupSubscriptions = async () => {
+      try {
+        // Subscribe to messages
+        unsubscribeMessages = subscribeToMessages(address, (newMessages) => {
+          setMessages(newMessages);
+        });
 
-    // Get conversations
-    getConversations(address)
-      .then(setConversations)
-      .catch((error) => {
-        console.error("Error fetching conversations:", error);
-        setError("Failed to load conversations");
-      });
+        // Get conversations
+        const convos = await getConversations(address);
+        setConversations(convos);
+      } catch (error) {
+        console.error("Error setting up Firebase subscriptions:", error);
+        setError("Failed to connect to chat service");
+      }
+    };
+
+    setupSubscriptions();
 
     return () => {
-      unsubscribeMessages();
+      if (unsubscribeMessages) {
+        unsubscribeMessages();
+      }
     };
   }, [publicKey]);
 
@@ -42,15 +51,7 @@ export const useFirebaseChat = (publicKey: PublicKey | null) => {
     }
 
     try {
-      const messageId = `${Date.now()}-${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
-      await addMessage(
-        messageId,
-        publicKey.toBase58(),
-        recipientAddress,
-        content
-      );
+      await addMessage(publicKey.toBase58(), recipientAddress, content);
       return true;
     } catch (error) {
       console.error("Error sending message:", error);
@@ -59,10 +60,19 @@ export const useFirebaseChat = (publicKey: PublicKey | null) => {
     }
   };
 
+  const markAsRead = async (messageId: string) => {
+    try {
+      await markMessageAsRead(messageId);
+    } catch (error) {
+      console.error("Error marking message as read:", error);
+    }
+  };
+
   return {
     messages,
     conversations,
     sendMessage,
+    markAsRead,
     error,
   };
 };

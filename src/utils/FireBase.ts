@@ -9,6 +9,8 @@ import {
   orderBy,
   Timestamp,
   DocumentData,
+  updateDoc,
+  doc,
 } from "firebase/firestore";
 import { Message } from "../types/message";
 
@@ -26,20 +28,21 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 export const addMessage = async (
-  messageId: string,
   sender: string,
   recipient: string,
   content: string
 ): Promise<void> => {
   try {
-    await addDoc(collection(db, "messages"), {
-      messageId,
+    const messageData = {
       sender,
       recipient,
       content,
       timestamp: Timestamp.now(),
       status: "pending",
-    });
+      participants: [sender, recipient],
+    };
+
+    await addDoc(collection(db, "messages"), messageData);
   } catch (error) {
     console.error("Error adding message:", error);
     throw error;
@@ -53,7 +56,7 @@ export const subscribeToMessages = (
   const messagesRef = collection(db, "messages");
   const q = query(
     messagesRef,
-    where("recipient", "==", userAddress),
+    where("participants", "array-contains", userAddress),
     orderBy("timestamp", "desc")
   );
 
@@ -72,6 +75,19 @@ export const subscribeToMessages = (
     });
     callback(messages);
   });
+};
+
+export const markMessageAsRead = async (messageId: string) => {
+  try {
+    const messageRef = doc(db, "messages", messageId);
+    await updateDoc(messageRef, {
+      status: "read",
+      readAt: Timestamp.now(),
+    });
+  } catch (error) {
+    console.error("Error marking message as read:", error);
+    throw error;
+  }
 };
 
 export const getConversations = async (userAddress: string) => {
@@ -93,7 +109,11 @@ export const getConversations = async (userAddress: string) => {
 
         if (!conversations.has(otherParticipant)) {
           conversations.set(otherParticipant, {
-            lastMessage: data,
+            address: otherParticipant,
+            lastMessage: {
+              content: data.content,
+              timestamp: data.timestamp,
+            },
             unreadCount:
               data.status === "pending" && data.recipient === userAddress
                 ? 1
@@ -102,13 +122,7 @@ export const getConversations = async (userAddress: string) => {
         }
       });
 
-      resolve(
-        Array.from(conversations.entries()).map(([address, data]) => ({
-          address,
-          lastMessage: data.lastMessage,
-          unreadCount: data.unreadCount,
-        }))
-      );
+      resolve(Array.from(conversations.values()));
     });
   });
 };
