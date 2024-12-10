@@ -1,27 +1,21 @@
 import { initializeApp } from "firebase/app";
 import {
-  getFirestore,
-  collection,
-  addDoc,
+  getDatabase,
+  ref,
+  push,
+  onValue,
+  update,
   query,
-  where,
-  onSnapshot,
-  orderBy,
-  Timestamp,
-  updateDoc,
-  doc,
-  enableIndexedDbPersistence,
-  initializeFirestore,
-  persistentLocalCache,
-  persistentSingleTabManager,
-  DocumentData,
-} from "firebase/firestore";
+  orderByChild,
+  equalTo,
+} from "firebase/database";
 import { Message } from "../types/message";
 
-// Configuration Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyA2yE4q6C49Fu6CDwsOB0_ijOVfVHNgnT8",
+  apiKey: "AIzaSyA2yE4q6C49Fu6cDwsOB0_ijOVfVHNgnT8",
   authDomain: "solage-7829c.firebaseapp.com",
+  databaseURL:
+    "https://solage-7829c-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "solage-7829c",
   storageBucket: "solage-7829c.firebasestorage.app",
   messagingSenderId: "228678821089",
@@ -29,134 +23,100 @@ const firebaseConfig = {
   measurementId: "G-3PTTNYLQ9C",
 };
 
-// Initialisation de Firebase et Firestore avec des paramètres optimisés
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentSingleTabManager(),
-  }),
-});
-
-// Fonction pour activer la persistance hors ligne
-const enablePersistence = async (): Promise<void> => {
-  try {
-    await enableIndexedDbPersistence(db);
-    console.info("Offline persistence enabled successfully.");
-  } catch (err: any) {
-    if (err.code === "failed-precondition") {
-      console.warn(
-        "Persistence failed: Multiple tabs open. Persistence enabled in the first tab only."
-      );
-    } else if (err.code === "unimplemented") {
-      console.warn("Persistence is not supported in this browser.");
-    } else {
-      console.error("Error enabling persistence:", err);
-    }
-  }
-};
-
-// Appel de la fonction pour activer la persistance
-enablePersistence();
-
-// Fonction pour ajouter un message
 export const addMessage = async (
   sender: string,
   recipient: string,
   content: string
 ): Promise<void> => {
   try {
-    const messageData: Message = {
+    const messagesRef = ref(db, "messages");
+    const newMessage = {
       sender,
       recipient,
       content,
-      timestamp: Timestamp.now(),
+      timestamp: Date.now(),
       status: "pending",
-      participants: [sender, recipient].sort(),
+      participants: [sender, recipient].sort().join(","),
     };
 
-    await addDoc(collection(db, "messages"), messageData);
-    console.info("Message added successfully.");
+    await push(messagesRef, newMessage);
   } catch (error) {
     console.error("Error adding message:", error);
     throw error;
   }
 };
 
-// Fonction pour souscrire aux messages d'un utilisateur
 export const subscribeToMessages = (
   userAddress: string,
   callback: (messages: Message[]) => void
-): (() => void) => {
-  const messagesRef = collection(db, "messages");
-  const q = query(
-    messagesRef,
-    where("participants", "array-contains", userAddress),
-    orderBy("timestamp", "desc")
-  );
+) => {
+  const messagesRef = ref(db, "messages");
+  const messagesQuery = query(messagesRef);
 
-  return onSnapshot(
-    q,
-    { includeMetadataChanges: true },
-    (snapshot) => {
-      const messages: Message[] = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        timestamp: doc.data().timestamp.toDate(),
-      })) as Message[];
+  const unsubscribe = onValue(messagesQuery, (snapshot) => {
+    const messages: Message[] = [];
+    snapshot.forEach((childSnapshot) => {
+      const data = childSnapshot.val();
+      const participants = data.participants.split(",");
 
-      callback(messages);
-    },
-    (error) => {
-      console.error("Messages subscription error:", error);
-    }
-  );
+      if (participants.includes(userAddress)) {
+        messages.push({
+          id: childSnapshot.key!,
+          sender: data.sender,
+          recipient: data.recipient,
+          content: data.content,
+          timestamp: new Date(data.timestamp),
+          status: data.status,
+        });
+      }
+    });
+
+    // Sort messages by timestamp in descending order
+    messages.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    callback(messages);
+  });
+
+  return () => {
+    unsubscribe();
+  };
 };
 
-// Fonction pour marquer un message comme lu
-export const markMessageAsRead = async (messageId: string): Promise<void> => {
+export const markMessageAsRead = async (messageId: string) => {
   try {
-    const messageRef = doc(db, "messages", messageId);
-    await updateDoc(messageRef, {
+    const messageRef = ref(db, `messages/${messageId}`);
+    await update(messageRef, {
       status: "read",
-      readAt: Timestamp.now(),
+      readAt: Date.now(),
     });
-    console.info(`Message ${messageId} marked as read.`);
   } catch (error) {
     console.error("Error marking message as read:", error);
     throw error;
   }
 };
 
-// Fonction pour récupérer les conversations d'un utilisateur
-export const getConversations = async (
-  userAddress: string
-): Promise<DocumentData[]> => {
-  const messagesRef = collection(db, "messages");
-  const q = query(
-    messagesRef,
-    where("participants", "array-contains", userAddress),
-    orderBy("timestamp", "desc")
-  );
+export const getConversations = async (userAddress: string) => {
+  return new Promise((resolve) => {
+    const messagesRef = ref(db, "messages");
+    const unsubscribe = onValue(messagesRef, (snapshot) => {
+      const conversations = new Map();
 
-  return new Promise<DocumentData[]>((resolve) => {
-    const unsubscribe = onSnapshot(
-      q,
-      { includeMetadataChanges: true },
-      (snapshot) => {
-        const conversations = new Map<string, DocumentData>();
+      snapshot.forEach((childSnapshot) => {
+        const data = childSnapshot.val();
+        const participants = data.participants.split(",");
 
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          const otherParticipant =
-            data.sender === userAddress ? data.recipient : data.sender;
+        if (participants.includes(userAddress)) {
+          const otherParticipant = participants.find((p) => p !== userAddress)!;
 
           if (!conversations.has(otherParticipant)) {
             conversations.set(otherParticipant, {
               address: otherParticipant,
               lastMessage: {
                 content: data.content,
-                timestamp: data.timestamp.toDate(),
+                timestamp: new Date(data.timestamp),
               },
               unreadCount:
                 data.status === "pending" && data.recipient === userAddress
@@ -164,15 +124,11 @@ export const getConversations = async (
                   : 0,
             });
           }
-        });
+        }
+      });
 
-        resolve(Array.from(conversations.values()));
-        unsubscribe(); // Clean up subscription after first data retrieval
-      },
-      (error) => {
-        console.error("Conversations subscription error:", error);
-        resolve([]);
-      }
-    );
+      resolve(Array.from(conversations.values()));
+      unsubscribe();
+    });
   });
 };
