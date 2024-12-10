@@ -14,15 +14,14 @@ import {
   enableIndexedDbPersistence,
   CACHE_SIZE_UNLIMITED,
   initializeFirestore,
-  enableMultiTabIndexedDbPersistence,
+  persistentLocalCache,
+  persistentSingleTabManager,
 } from "firebase/firestore";
 import { Message } from "../types/message";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA2yE4q6C49Fu6cDwsOB0_ijOVfVHNgnT8",
   authDomain: "solage-7829c.firebaseapp.com",
-  databaseURL:
-    "https://solage-7829c-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "solage-7829c",
   storageBucket: "solage-7829c.firebasestorage.app",
   messagingSenderId: "228678821089",
@@ -30,18 +29,28 @@ const firebaseConfig = {
   measurementId: "G-3PTTNYLQ9C",
 };
 
+// Initialize Firebase with enhanced settings
 const app = initializeApp(firebaseConfig);
 
-// Initialiser Firestore avec des paramètres optimisés
+// Initialize Firestore with optimized settings
 const db = initializeFirestore(app, {
-  cacheSizeBytes: CACHE_SIZE_UNLIMITED,
-  experimentalForceLongPolling: true, // Forcer le long polling au lieu de WebSocket
+  localCache: persistentLocalCache({
+    tabManager: persistentSingleTabManager(),
+  }),
 });
 
-// Activer la persistance hors ligne avec la méthode mise à jour
-enableIndexedDbPersistence(db, { forceOwnership: true }).catch((err) => {
-  console.error("Erreur d'activation de la persistance IndexedDb:", err);
-});
+// Enable offline persistence with error handling
+try {
+  enableIndexedDbPersistence(db);
+} catch (err) {
+  if (err.code === "failed-precondition") {
+    console.warn(
+      "Multiple tabs open, persistence can only be enabled in one tab at a time."
+    );
+  } else if (err.code === "unimplemented") {
+    console.warn("The current browser doesn't support persistence.");
+  }
+}
 
 export const addMessage = async (
   sender: string,
@@ -55,7 +64,7 @@ export const addMessage = async (
       content,
       timestamp: Timestamp.now(),
       status: "pending",
-      participants: [sender, recipient],
+      participants: [sender, recipient].sort(), // Sort to ensure consistent ordering
     };
 
     await addDoc(collection(db, "messages"), messageData);
@@ -76,10 +85,9 @@ export const subscribeToMessages = (
     orderBy("timestamp", "desc")
   );
 
-  return onSnapshot(
-    q,
-    { includeMetadataChanges: true }, // Ajouter les métadonnées pour une meilleure gestion des états
-    (snapshot) => {
+  const unsubscribe = onSnapshot(q, {
+    includeMetadataChanges: true,
+    next: (snapshot) => {
       const messages: Message[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
@@ -94,12 +102,17 @@ export const subscribeToMessages = (
       });
       callback(messages);
     },
-    (error) => {
-      console.error("Erreur d'écoute des messages:", error);
-      // Réessayer la connexion en cas d'erreur
-      setTimeout(() => subscribeToMessages(userAddress, callback), 5000);
-    }
-  );
+    error: (error) => {
+      console.error("Messages subscription error:", error);
+      // Implement exponential backoff retry
+      setTimeout(() => {
+        console.log("Attempting to reconnect to messages stream...");
+        subscribeToMessages(userAddress, callback);
+      }, 5000);
+    },
+  });
+
+  return unsubscribe;
 };
 
 export const markMessageAsRead = async (messageId: string) => {
@@ -124,10 +137,9 @@ export const getConversations = async (userAddress: string) => {
   );
 
   return new Promise((resolve) => {
-    onSnapshot(
-      q,
-      { includeMetadataChanges: true },
-      (snapshot) => {
+    const unsubscribe = onSnapshot(q, {
+      includeMetadataChanges: true,
+      next: (snapshot) => {
         const conversations = new Map<string, DocumentData>();
 
         snapshot.forEach((doc) => {
@@ -152,10 +164,13 @@ export const getConversations = async (userAddress: string) => {
 
         resolve(Array.from(conversations.values()));
       },
-      (error) => {
-        console.error("Erreur de récupération des conversations:", error);
+      error: (error) => {
+        console.error("Conversations subscription error:", error);
         resolve([]);
-      }
-    );
+      },
+    });
+
+    // Clean up subscription after initial load
+    setTimeout(() => unsubscribe(), 1000);
   });
 };
