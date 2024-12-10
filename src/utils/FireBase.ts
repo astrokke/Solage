@@ -12,7 +12,6 @@ import {
   updateDoc,
   doc,
   enableIndexedDbPersistence,
-  CACHE_SIZE_UNLIMITED,
   initializeFirestore,
   persistentLocalCache,
   persistentSingleTabManager,
@@ -32,23 +31,23 @@ const firebaseConfig = {
 // Initialize Firebase with enhanced settings
 const app = initializeApp(firebaseConfig);
 
-// Initialize Firestore with optimized settings
+// Initialize Firestore with optimized settings for better offline support
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentSingleTabManager(),
   }),
+  experimentalAutoDetectLongPolling: true,
+  experimentalForceLongPolling: true,
 });
 
 // Enable offline persistence with error handling
 try {
-  enableIndexedDbPersistence(db);
-} catch (err) {
+  await enableIndexedDbPersistence(db);
+} catch (err: any) {
   if (err.code === "failed-precondition") {
-    console.warn(
-      "Multiple tabs open, persistence can only be enabled in one tab at a time."
-    );
+    console.warn("Multiple tabs open, persistence enabled in first tab only");
   } else if (err.code === "unimplemented") {
-    console.warn("The current browser doesn't support persistence.");
+    console.warn("Browser doesn't support persistence");
   }
 }
 
@@ -64,7 +63,7 @@ export const addMessage = async (
       content,
       timestamp: Timestamp.now(),
       status: "pending",
-      participants: [sender, recipient].sort(), // Sort to ensure consistent ordering
+      participants: [sender, recipient].sort(),
     };
 
     await addDoc(collection(db, "messages"), messageData);
@@ -85,9 +84,10 @@ export const subscribeToMessages = (
     orderBy("timestamp", "desc")
   );
 
-  const unsubscribe = onSnapshot(q, {
-    includeMetadataChanges: true,
-    next: (snapshot) => {
+  return onSnapshot(
+    q,
+    { includeMetadataChanges: true },
+    (snapshot) => {
       const messages: Message[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
@@ -102,17 +102,10 @@ export const subscribeToMessages = (
       });
       callback(messages);
     },
-    error: (error) => {
+    (error) => {
       console.error("Messages subscription error:", error);
-      // Implement exponential backoff retry
-      setTimeout(() => {
-        console.log("Attempting to reconnect to messages stream...");
-        subscribeToMessages(userAddress, callback);
-      }, 5000);
-    },
-  });
-
-  return unsubscribe;
+    }
+  );
 };
 
 export const markMessageAsRead = async (messageId: string) => {
@@ -137,9 +130,10 @@ export const getConversations = async (userAddress: string) => {
   );
 
   return new Promise((resolve) => {
-    const unsubscribe = onSnapshot(q, {
-      includeMetadataChanges: true,
-      next: (snapshot) => {
+    const unsubscribe = onSnapshot(
+      q,
+      { includeMetadataChanges: true },
+      (snapshot) => {
         const conversations = new Map<string, DocumentData>();
 
         snapshot.forEach((doc) => {
@@ -163,14 +157,12 @@ export const getConversations = async (userAddress: string) => {
         });
 
         resolve(Array.from(conversations.values()));
+        unsubscribe(); // Clean up subscription after getting initial data
       },
-      error: (error) => {
+      (error) => {
         console.error("Conversations subscription error:", error);
         resolve([]);
-      },
-    });
-
-    // Clean up subscription after initial load
-    setTimeout(() => unsubscribe(), 1000);
+      }
+    );
   });
 };
